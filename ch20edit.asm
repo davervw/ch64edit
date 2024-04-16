@@ -110,55 +110,7 @@ check_overflow:
   sta $23
 + jmp main
 
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  tax
-  strout_then_fill_color_ram:
+strout_then_fill_color_ram:
   jsr strout
   ldy #$00
   lda $0286
@@ -251,12 +203,11 @@ disphex:
 + sta ($24),y
   rts
 
-*=$1d00
 clear_header:
-!byte $93
+  !byte $93
 
 header:
-!byte $12,$20,$37,$36,$35,$34,$33,$32,$31,$30,$20,$0d,$00
+  !byte $12,$20,$37,$36,$35,$34,$33,$32,$31,$30,$20,$0d,$00
 
 blanks:
-!byte $92,$20,$20,$20,$20,$20,$20,$20,$20,$12,$00
+  !byte $92,$20,$20,$20,$20,$20,$20,$20,$20,$12,$00
