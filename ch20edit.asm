@@ -17,7 +17,16 @@ new_start:
   ; initialize screen
   lda #<clear_header
   ldx #>clear_header
-  jsr strout_then_fill_color_ram
+  jsr strout
+
+  ; fill color ram so we can poke characters to video ram to be seen
+  ldy #$00
+  lda $0286
+- sta $9600,y
+  sta $9700,y
+  iny
+  bne -
+
   lda #$30 ; zero character
   sta $fd  ; init first digit
   lda #$08
@@ -65,15 +74,36 @@ new_start:
 main:
   jsr dispchar
 --jsr getkey
-  beq --
+  beq -- ; no key pressed
+
   cmp #$4e ; 'N' key
-  bne key2
+  bne ++
   lda $22
   adc #$07
   sta $22
-  bcc +
+  bcc main
   inc $23
-+ jmp check_overflow
+  lda $23
+  cmp #$18
+  bcc main
+  lda #$10
+  sta $23
++ bne main
+
+++cmp #$42 ; 'B' key
+  bne --
+  sec
+  lda $22
+  sbc #$08
+  sta $22
+  bcs main
+  dec $23
+  lda $23
+  cmp #$10
+  bcs main
+  lda #$17
+  sta $23
+  bne main
 
 strout:
   sta $fb
@@ -85,40 +115,6 @@ strout:
   iny
   bne - ; assume <= 256 length
 + rts
-
-key2:
-  cmp #$42 ; 'B' key
-  bne --
-  sec
-  lda $22
-  sbc #$08
-  sta $22
-  bcs +
-  dec $23
-+ lda $23
-  cmp #$10
-  bcs +
-  lda #$17
-  sta $23
-+ jmp main
-
-check_overflow:
-  lda $23
-  cmp #$18
-  bcc +
-  lda #$10
-  sta $23
-+ jmp main
-
-strout_then_fill_color_ram:
-  jsr strout
-  ldy #$00
-  lda $0286
-- sta $9600,y
-  sta $9700,y
-  iny
-  bne -
-  rts
 
 dispchar:
   lda #$17
@@ -182,17 +178,12 @@ disphex:
   lsr
   lsr
   lsr
-  ora #$30 ; '0' screen code
-  cmp #$3a
-  bcc +    ; branch if less
-  sbc #$39 ; subtract to get to 'A' to 'F' screen codes
-+ bit $ff
-  bpl +
-  ora #$80 ; reverse text
-+ sta ($24),y
+  jsr dispnybl
   inc $24
   pla
   and #$0f
+  ; fall through
+dispnybl:
   ora #$30 ; '0' screen code
   cmp #$3a
   bcc +    ; branch if less
