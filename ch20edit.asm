@@ -1,96 +1,115 @@
 ; ch20edit.asm
 
+charrom = $8000
+charout = $ffd2
+getkey = $ffe4
+
 *=$1001
+start:
 !byte $0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 
 
 *=$1800
+new_start:
 !byte $00,$0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 
-  lda #$18
-  sta $2c
-  lda #$00
-  ldx #$1d
-  jsr $18f2
-  lda #$30
-  sta $fd
+  lda #>new_start
+  sta $2c ; reset basic start
+
+  ; initialize screen
+  lda #<clear_header
+  ldx #>clear_header
+  jsr strout_then_fill_color_ram
+  lda #$30 ; zero character
+  sta $fd  ; init first digit
   lda #$08
-  sta $ff
-  lda #$12
-  jsr $ffd2
-  lda $fd
-  jsr $ffd2
-  lda #$0e
-  ldx #$1d
-  jsr $1888
-  lda $fd
-  jsr $ffd2
-  lda #$0d
-  jsr $ffd2
-  inc $fd
-  dec $ff
-  bne $1820
-  lda #$01
-  ldx #$1d
-  jsr $1888
-  lda #$00
+  sta $ff  ; set count
+- lda #$12 ; rvs on
+  jsr charout
+  lda $fd  ; retrieve digit
+  jsr charout
+  lda #<blanks
+  ldx #>blanks
+  jsr strout
+  lda $fd ; retrieve digit
+  jsr charout
+  lda #$0d ; carriage return
+  jsr charout
+  inc $fd  ; ++digit
+  dec $ff  ; --count
+  bne -
+  lda #<header
+  ldx #>header
+  jsr strout
+
+; copy charrom to ram 
+  lda #0
   sta $fb
   sta $fd
   sta $22
-  lda #$10
+  lda #>start
   sta $fc
   sta $23
-  lda #$80
+  lda #>charrom
   sta $fe
   lda #$08
-  sta $ff
+  sta $ff ; store count
   ldy #$00
-  lda ($fd),y
+- lda ($fd),y
   sta ($fb),y
   iny
-  bne $1860
+  bne -
   inc $fc
   inc $fe
   dec $ff
-  bne $1860
-  jsr $1904
-  jsr $ffe4
-  beq $1872
-  cmp #$4e
-  bne $1899
+  bne -
+
+main:
+  jsr dispchar
+--jsr getkey
+  beq --
+  cmp #$4e ; 'N' key
+  bne key2
   lda $22
   adc #$07
   sta $22
-  bcc $1885
+  bcc +
   inc $23
-  jmp $18b5
++ jmp check_overflow
+
+strout:
   sta $fb
   stx $fc
   ldy #$00
-  lda ($fb),y
-  beq $1898
-  jsr $ffd2
+- lda ($fb),y
+  beq +
+  jsr charout
   iny
-  bne $188e
-  rts
-  cmp #$42
-  bne $1872
+  bne - ; assume <= 256 length
++ rts
+
+key2:
+  cmp #$42 ; 'B' key
+  bne --
   sec
   lda $22
   sbc #$08
   sta $22
-  bcs $18a8
+  bcs +
   dec $23
-  lda $23
++ lda $23
   cmp #$10
-  bcs $18b2
+  bcs +
   lda #$17
   sta $23
-  jmp $186f
++ jmp main
+
+check_overflow:
   lda $23
   cmp #$18
-  bcc $18bf
+  bcc +
   lda #$10
   sta $23
-  jmp $186f
++ jmp main
+
   tax
   tax
   tax
@@ -139,14 +158,17 @@
   tax
   tax
   tax
-  jsr $1888
+  strout_then_fill_color_ram:
+  jsr strout
   ldy #$00
   lda $0286
-  sta $9600,y
+- sta $9600,y
   sta $9700,y
   iny
-  bne $18fa
+  bne -
   rts
+
+dispchar:
   lda #$17
   sta $24
   lda #$1e
@@ -154,24 +176,24 @@
   lda #$08
   sta $ff
   ldy #$00
-  ldx #$08
+--ldx #$08
   lda ($22),y
   sta $26
-  lda #$20
+- lda #$20 ; ' ' space
   asl $26
-  bcc $1920
-  lda #$2a
-  sta ($24),y
+  bcc +
+  lda #$2a ; '*' asterisk
++ sta ($24),y
   inc $24
   dex
-  bne $1918
+  bne -
   clc
   lda $24
   adc #$0d
   sta $24
   iny
   dec $ff
-  bne $1912
+  bne --
   lda $23
   sta $ff
   lda $22
@@ -186,45 +208,47 @@
   sec
   ror $ff
   ldy #$00
-  jsr $1966
+  jsr disphex
   inc $24
   clc
   ror $ff
   ldx #$08
-  clc
+- clc
   lda $24
   adc #$14
   sta $24
   lda ($22),y
-  jsr $1966
+  jsr disphex
   iny
   dex
-  bne $1955
+  bne -
   rts
+
+disphex:
   pha
   lsr
   lsr
   lsr
   lsr
-  ora #$30
+  ora #$30 ; '0' screen code
   cmp #$3a
-  bcc $1973
-  sbc #$39
-  bit $ff
-  bpl $1979
-  ora #$80
-  sta ($24),y
+  bcc +    ; branch if less
+  sbc #$39 ; subtract to get to 'A' to 'F' screen codes
++ bit $ff
+  bpl +
+  ora #$80 ; reverse text
++ sta ($24),y
   inc $24
   pla
   and #$0f
-  ora #$30
+  ora #$30 ; '0' screen code
   cmp #$3a
-  bcc $1988
-  sbc #$39
-  bit $ff
-  bpl $198e
-  ora #$80
-  sta ($24),y
+  bcc +    ; branch if less
+  sbc #$39 ; subtract to get to 'A' to 'F' screen codes
++ bit $ff
+  bpl +
+  ora #$80 ; reverse text
++ sta ($24),y
   rts
 
 *=$1d00
