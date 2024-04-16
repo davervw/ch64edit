@@ -48,6 +48,9 @@ new_start:
   lda #<header
   ldx #>header
   jsr strout
+  lda #<copyright
+  ldx #>copyright
+  jsr strout
 
 ; copy charrom to ram 
   lda #0
@@ -202,3 +205,10 @@ header:
 
 blanks:
   !byte $92,$20,$20,$20,$20,$20,$20,$20,$20,$12,$00
+
+copyright:
+  !byte 13
+  !text "CH20EDIT"
+  !byte 13
+  !text "(C) 2024 DAVEVW.COM"
+  !byte 0
