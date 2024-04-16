@@ -2,4 +2,6 @@
 
 Vic-20 (unexpanded) character editor
 
-![prototype](media/prototype.png)
+Note: load/save missing.  Use VICE monitor to save memory from $1000 to $17FF for characters.
+
+![prototype](media/functional.png)

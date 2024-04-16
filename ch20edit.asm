@@ -11,10 +11,37 @@ start:
 *=$1800
 new_start:
 !byte $00,$0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 
+  lda $2c
+  cmp #>new_start
+  beq init_screen ; skip one-time init
   lda #>new_start
   sta $2c ; reset basic start
 
-  ; initialize screen
+  lda $9005
+  and #$F0
+  sta $9005 ; turn off programmable characters
+
+; copy charrom to ram 
+  lda #0
+  sta $fb
+  sta $fd
+  lda #>(start-1)
+  sta $fc
+  lda #>charrom
+  sta $fe
+  lda #$08
+  sta $ff ; store count
+  ldy #$00
+- lda ($fd),y
+  sta ($fb),y
+  iny
+  bne -
+  inc $fc
+  inc $fe
+  dec $ff
+  bne -
+
+init_screen:
   lda #<clear_header
   ldx #>clear_header
   jsr strout
@@ -52,32 +79,28 @@ new_start:
   ldx #>copyright
   jsr strout
 
-; copy charrom to ram 
   lda #0
-  sta $fb
-  sta $fd
+  sta $27
+  lda #0
+  sta $28
+  lda #23
+  sta $29
+  lda #$1e
+  sta $2a
+  lda #<(start-1)
   sta $22
-  lda #>start
-  sta $fc
+  lda #>(start-1)
   sta $23
-  lda #>charrom
-  sta $fe
-  lda #$08
-  sta $ff ; store count
-  ldy #$00
-- lda ($fd),y
-  sta ($fb),y
-  iny
-  bne -
-  inc $fc
-  inc $fe
-  dec $ff
-  bne -
 
 main:
+  clc
+  lda $a2
+  adc #$1e
+  sta $a3
   jsr dispchar
---jsr getkey
-  beq -- ; no key pressed
+- jsr chkblink
+  jsr getkey
+  beq - ; no key pressed
 
   cmp #$4e ; 'N' key
   bne ++
@@ -94,7 +117,7 @@ main:
 + bne main
 
 ++cmp #$42 ; 'B' key
-  bne --
+  bne ++
   sec
   lda $22
   sbc #$08
@@ -107,6 +130,126 @@ main:
   lda #$17
   sta $23
   bne main
+
+++cmp #$11 ; cursor down key
+  bne ++
+  jsr blinkoff
+  clc
+  lda $29
+  adc #22
+  sta $29
+  lda $28
+  adc #1
+  and #7
+  sta $28
+  bne +
+  sec
+  lda $29
+  sbc #(22*8)
+  sta $29
++ jmp -
+
+++cmp #$91 ; cursor up key
+  bne ++
+  jsr blinkoff
+  sec
+  lda $29
+  sbc #22
+  sta $29
+  sec
+  lda $28
+  sbc #1
+  and #7
+  sta $28
+  cmp #7
+  bne +
+  clc
+  lda $29
+  adc #(22*8)
+  sta $29
++ jmp -
+
+++cmp #$1D ; cursor right key
+  bne ++
+  jsr blinkoff
+  inc $29
+  clc
+  lda $27
+  adc #1
+  sta $27
+  and #7
+  bne +
+  sec
+  lda $29
+  sbc #8
+  sta $29
+  lda #0
+  sta $27
++ jmp -
+
+++cmp #$9D ; cursor left key
+  bne ++
+  jsr blinkoff
+  dec $29
+  dec $27
+  bpl +
+  clc
+  lda $29
+  adc #8
+  sta $29
+  lda #7
+  sta $27
++ jmp -
+
+++cmp #$20 ; space key
+  bne ++
+  jsr blinkoff
+  ldx $27
+  ldy $28
+  lda ($22),y
+  eor bitmask,x
+  sta ($22),y
+  jmp main
+
+++cmp #$03 ; break key
+  bne ++
+  jsr blinkoff
+  lda $9005
+  and #$F0
+  ora #$0C
+  sta $9005 ; turn on programmable characters
+  
+  lda #<$1e00
+  ldx #>$1e00
+  sta $fb
+  stx $fc
+  lda #16
+  sta $ff
+  lda #0
+  sta $fd
+---
+  ldy #0
+--lda $fd
+  sta ($fb),y
+  inc $fd
+  iny
+  cpy #16
+  bcc --
+  clc
+  lda $fb
+  adc #22
+  sta $fb
+  bcc +
+  inc $fc
++ dec $ff
+  bne ---
+
+  lda #<exit
+  ldx #>exit
+  jsr strout
+  rts
+
+++jmp -
 
 strout:
   sta $fb
@@ -197,6 +340,34 @@ dispnybl:
 + sta ($24),y
   rts
 
+chkblink:
+  sec
+  lda $a3
+  cmp $a2
+  bne +
+  lda $a2
+  adc #$1d
+  sta $a3
+  ldy #0
+  lda ($29),y
+  eor #$80
+  sta ($29),y
++ rts
+
+blinkoff:
+  ldy #0
+  lda ($29),y
+  and #$7f
+  sta ($29),y
+  clc
+  lda $a2
+  adc #2
+  sta $a3
+  rts
+
+bitmask:
+  !byte $80,$40,$20,$10,$08,$04,$02,$01
+
 clear_header:
   !byte $93
 
@@ -207,8 +378,23 @@ blanks:
   !byte $92,$20,$20,$20,$20,$20,$20,$20,$20,$12,$00
 
 copyright:
-  !byte 13
+  !byte 13,18
+  !text "B"
+  !byte 146
+  !text "ACK "
+  !byte 18
+  !text "N"
+  !byte 146
+  !text "EXT"
+  !byte 13,18
+  !text "SPACE"
+  !byte 146,32,18
+  !text "STOP"
+  !byte 13,13
   !text "CH20EDIT"
   !byte 13
   !text "(C) 2024 DAVEVW.COM"
   !byte 0
+
+exit:
+  !byte 20,20,20,13,13,13,13,0
