@@ -3,6 +3,9 @@
 charrom = $8000
 charout = $ffd2
 getkey = $ffe4
+setlfs = $ffba
+setnam = $ffbd
+save = $ffd8
 
 *=$1001
 start:
@@ -249,6 +252,40 @@ main:
   jsr strout
   rts
 
+++cmp #$53 ; 'S' key
+  bne ++
+  jsr blinkoff
+  lda #$0d
+  jsr charout
+  lda #10
+  sta $39
+  lda #0
+  sta $3a
+  lda #$c0 ; KERNAL control and error messages
+  sta $9d ; set messages to be displayed
+  lda #1
+  ldx #8
+  ldy #15
+  jsr setlfs
+  lda #(filename_end - filename)
+  ldx #<filename
+  ldy #>filename
+  jsr setnam
+  lda #<(start-1)
+  sta $fb
+  lda #>(start-1)
+  sta $fc
+  lda #$fb
+  ldx #<(new_start)
+  ldy #>(new_start)
+  jsr save
+  lda #<press_key
+  ldx #>press_key
+  jsr strout
+--jsr getkey
+  beq --
+  jmp init_screen
+
 ++jmp -
 
 strout:
@@ -378,23 +415,18 @@ blanks:
   !byte $92,$20,$20,$20,$20,$20,$20,$20,$20,$12,$00
 
 copyright:
-  !byte 13,18
-  !text "B"
-  !byte 146
-  !text "ACK "
-  !byte 18
-  !text "N"
-  !byte 146
-  !text "EXT"
-  !byte 13,18
-  !text "SPACE"
-  !byte 146,32,18
-  !text "STOP"
-  !byte 13,13
-  !text "CH20EDIT"
-  !byte 13
+  !text 13,18,"B",146,"ACK ",18,"N",146,"EXT ",18,"S",146,"AVE",13
+  !text 18,"SPACE",146,32,18,"STOP",13
+  !text 13
+  !text "CH20EDIT",13
   !text "(C) 2024 DAVEVW.COM"
   !byte 0
 
 exit:
   !byte 20,20,20,13,13,13,13,0
+
+filename:
+  !text "@0:FONT.BIN"
+filename_end:
+
+press_key: !text 13, 13, "PRESS ANY KEY", 13, 0
