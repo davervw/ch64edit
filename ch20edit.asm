@@ -13,7 +13,8 @@ start:
 
 *=$1800
 new_start:
-!byte $00,$0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 
+!byte $00,$0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00
+begin:
   lda $2c
   cmp #>new_start
   beq init_screen ; skip one-time init
@@ -21,8 +22,8 @@ new_start:
   sta $2c ; reset basic start
 
   lda $9005
-  and #$F0
-  sta $9005 ; turn off programmable characters
+  and #$F2
+  sta $9005 ; turn off programmable characters, but keep upper/lower choice
 
 ; copy charrom to ram 
   lda #0
@@ -30,8 +31,12 @@ new_start:
   sta $fd
   lda #>(start-1)
   sta $fc
-  lda #>charrom
-  sta $fe
+  ldx #>charrom
+  lda $9005
+  and #2
+  beq +
+  ldx #(>charrom) + 8
++ stx $fe
   lda #$08
   sta $ff ; store count
   ldy #$00
