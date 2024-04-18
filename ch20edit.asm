@@ -21,10 +21,6 @@ begin:
   lda #>new_start
   sta $2c ; reset basic start
 
-  lda $9005
-  and #$F2
-  sta $9005 ; turn off programmable characters, but keep upper/lower choice
-
 ; copy charrom to ram 
   lda #0
   sta $fb
@@ -48,6 +44,11 @@ begin:
   inc $fe
   dec $ff
   bne -
+
+  lda $9005
+  and #$F0
+  ora #$0C
+  sta $9005 ; turn on programmable characters
 
 init_screen:
   lda #<clear_header
@@ -252,7 +253,7 @@ home:
 
 ++cmp #$20 ; space key
   bne ++
-toggle:  
+toggle_bit:  
   ldx $27
   ldy $28
   lda ($22),y
@@ -271,6 +272,10 @@ bye:
   lda #<done
   ldx #>done
   jsr strout
+
+  jsr fill_color
+  jsr all_chars
+
   rts
 
 ++cmp #$53 ; 'S' key
@@ -449,6 +454,14 @@ mirror:
   sta ($22),y
   dey
   bpl --
+  jmp main
+
+++cmp #$40 ; '@' key
+toggle_chars:
+  bne ++
+  lda $9005
+  eor #$0C
+  sta $9005
   ; fall through
 
 ++jmp main
@@ -620,7 +633,7 @@ lines:
   !text 20,18," CH20EDIT ",0
   !text 20,18," (C) 2024 ",0
   !text 20,18,"DAVEVW.COM",0
-  !text "   ",18,"-",146," ",18,"+",13,0
+  !text 18,"@",146,"  ",18,"-",146," ",18,"+",13,0
   !text 18,"B",146,"ACK ",18,"N",146,"EXT",0
   !text 18,"F",146,"LIP ",18,"R",146,"OTA",0
   !text 18,"M",146,"IRR ",18,"<>^V",0
