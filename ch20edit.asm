@@ -5,7 +5,7 @@ charout = $ffd2
 getkey = $ffe4
 setlfs = $ffba
 setnam = $ffbd
-save = $ffd8
+fsave = $ffd8
 
 *=$1001
 start:
@@ -53,6 +53,11 @@ init_screen:
   lda #<clear_header
   ldx #>clear_header
   jsr strout
+  lda #<lines
+  ldx #>lines
+  sta $b4
+  stx $b5
+  jsr linesout
 
   ; fill color ram so we can poke characters to video ram to be seen
   jsr fill_color
@@ -68,19 +73,17 @@ init_screen:
   lda #<blanks
   ldx #>blanks
   jsr strout
-  lda $fd ; retrieve digit
+  lda #$20 ; space
   jsr charout
-  lda #$0d ; carriage return
-  jsr charout
+  jsr linesout
   inc $fd  ; ++digit
   dec $ff  ; --count
   bne -
   lda #<header
   ldx #>header
   jsr strout
-  lda #<copyright
-  ldx #>copyright
-  jsr strout
+  jsr linesout
+  jsr all_chars
 
   lda #0
   sta $27
@@ -110,6 +113,7 @@ main:
 
   cmp #$4e ; 'N' key
   bne ++
+next_char:
   lda $22
   adc #$07
   sta $22
@@ -124,6 +128,7 @@ main:
 
 ++cmp #$2b ; '+' key
   bne ++
+pgup:
   lda $22
   adc #$7f
   sta $22
@@ -138,6 +143,7 @@ main:
 
 ++cmp #$42 ; 'B' key
   bne ++
+back_char:
   lda $22
   sbc #$08
   sta $22
@@ -152,6 +158,7 @@ main:
 
 ++cmp #$2D ; '-' key
   bne ++
+pgdn:
   lda $22
   sbc #$80
   sta $22
@@ -166,9 +173,9 @@ main:
 
 ++cmp #$11 ; cursor down key
   bne ++
-  clc
+down:
   lda $29
-  adc #22
+  adc #21
   sta $29
   lda $28
   adc #1
@@ -183,7 +190,7 @@ main:
 
 ++cmp #$91 ; cursor up key
   bne ++
-  sec
+up:
   lda $29
   sbc #22
   sta $29
@@ -202,10 +209,10 @@ main:
 
 ++cmp #$1D ; cursor right key
   bne ++
+right:
   inc $29
-  clc
   lda $27
-  adc #1
+  adc #0
   sta $27
   and #7
   bne +
@@ -219,6 +226,7 @@ main:
 
 ++cmp #$9D ; cursor left key
   bne ++
+left:  
   dec $29
   dec $27
   bpl +
@@ -232,6 +240,7 @@ main:
 
 ++cmp #$13 ; HOME key
   bne ++
+home:  
   lda #0
   sta $27
   sta $28
@@ -243,6 +252,7 @@ main:
 
 ++cmp #$20 ; space key
   bne ++
+toggle:  
   ldx $27
   ldy $28
   lda ($22),y
@@ -250,51 +260,27 @@ main:
   sta ($22),y
   jmp main
 
-++cmp #$03 ; break key
+++cmp #$03 ; stop key
   bne ++
+bye:  
   lda $9005
   and #$F0
   ora #$0C
   sta $9005 ; turn on programmable characters
   
-  lda #147
-  jsr charout
-  jsr fill_color
-
-  lda #<$1e00
-  ldx #>$1e00
-  sta $fb
-  stx $fc
-  lda #16
-  sta $ff
-  lda #0
-  sta $fd
----
-  ldy #0
---lda $fd
-  sta ($fb),y
-  inc $fd
-  iny
-  cpy #16
-  bcc --
-  clc
-  lda $fb
-  adc #22
-  sta $fb
-  bcc +
-  inc $fc
-+ dec $ff
-  bne ---
-
-  lda #<exit
-  ldx #>exit
+  lda #<done
+  ldx #>done
   jsr strout
   rts
 
 ++cmp #$53 ; 'S' key
   bne ++
-  lda #$0d
+save_font:
+  ldx #13  
+- lda #$0d
   jsr charout
+  dex
+  bne -
   lda #10
   sta $39
   lda #0
@@ -316,7 +302,7 @@ main:
   lda #$fb
   ldx #<(new_start)
   ldy #>(new_start)
-  jsr save
+  jsr fsave
   lda #<press_key
   ldx #>press_key
   jsr strout
@@ -326,6 +312,7 @@ main:
 
 ++cmp #$93 ; CLR key
   bne ++
+clear:  
   lda #0
   ldy #7
 --sta ($22),y
@@ -335,6 +322,7 @@ main:
 
 ++cmp #$12 ; RVS key
   bne ++
+rvs:  
   ldy #7
 --lda ($22),y
   eor #$ff
@@ -345,6 +333,7 @@ main:
 
 ++cmp #$3C ; '<' key
   bne ++
+shiftleft:  
   ldy #7
 --lda ($22),y
   asl
@@ -355,6 +344,7 @@ main:
 
 ++cmp #$3E ; '>' key
   bne ++
+shiftright:  
   ldy #7
 --lda ($22),y
   lsr
@@ -365,6 +355,7 @@ main:
 
 ++cmp #$56 ; 'v' key
   bne ++
+shiftdown:  
   ldy #7
 --dey
   lda ($22),y
@@ -379,6 +370,7 @@ main:
 
 ++cmp #$5E ; '^' key
   bne ++
+shiftup:  
   ldx #7
   ldy #0
 --iny
@@ -394,6 +386,7 @@ main:
 
 ++cmp #$46 ; 'F' key
   bne ++
+flip:  
   ldy #3
   sty $ff
   iny
@@ -416,6 +409,7 @@ main:
 
 ++cmp #$52 ; 'R' key
   bne ++
+rotate:  
   ldy #0
 ---ldx #0
 --lda ($22),y
@@ -437,6 +431,7 @@ main:
 
 ++cmp #$4d ; 'M' key
   bne ++
+mirror:  
   ldy #7
 ---ldx #7
 --lda ($22),y
@@ -467,6 +462,23 @@ strout:
   jsr charout
   iny
   bne - ; assume <= 256 length
++ rts
+
+; output multiple buffers in a row in subsequent calls, kept track of by b4/b5
+linesout:
+  lda #<margin
+  ldx #>margin
+  jsr strout
+  lda $b4
+  ldx $b5
+  jsr strout
+  iny
+  tya
+  clc
+  adc $b4
+  sta $b4
+  bcc +
+  inc $b5
 + rts
 
 dispchar:
@@ -504,7 +516,7 @@ dispchar:
   ror
   lsr $ff
   ror
-  ldx #$0b
+  ldx #$0a
   stx $24
   sec
   ror $ff
@@ -581,6 +593,18 @@ fill_color:
   bne -
   rts
 
+all_chars:
+  lda #<($1e00+(11*22))
+  ldx #>($1e00+(11*22))
+  sta $fb
+  stx $fc
+  ldy #0
+- tya
+  sta ($fb),y
+  iny
+  bne -
+  rts
+
 bitmask:
   !byte $80,$40,$20,$10,$08,$04,$02,$01
 
@@ -589,25 +613,29 @@ invmask:
 
 clear_header:
   !byte $93
+header:  
+  !byte $12,$20,$37,$36,$35,$34,$33,$32,$31,$30,$20,$00
 
-header:
-  !byte $12,$20,$37,$36,$35,$34,$33,$32,$31,$30,$20,$0d,$00
+lines:
+  !text 20,18," CH20EDIT ",0
+  !text 20,18," (C) 2024 ",0
+  !text 20,18,"DAVEVW.COM",0
+  !text "   ",18,"-",146," ",18,"+",13,0
+  !text 18,"B",146,"ACK ",18,"N",146,"EXT",0
+  !text 18,"F",146,"LIP ",18,"R",146,"OTA",0
+  !text 18,"M",146,"IRR ",18,"<>^V",0
+  !text 18,"HOME",146," ",18,"CLR",13,0
+  !text 18,"SPACE",146," ",18,"RVS",0
+  !text 18,"STOP",146," ",18,"S",146,"AVE",0
 
 blanks:
   !byte $92,$20,$20,$20,$20,$20,$20,$20,$20,$12,$00
 
-copyright:
-  !text 13
-  !text 18,"B",146,"ACK",18,"-",146," ",18,"N",146,"EXT",18,"+",146," ",18,"HOME",146," ",18,"CLR",13
-  !text 18,"F",146,"LIP  ",18,"R",146,"OTAT ",18,"M",146,"IRR ",18,"<>",146," ",18,"^V"
-  !text "SPACE",146,32,18,"STOP",146,"  ",18,"RVS",146,"  ",18,"S",146,"AVE "
-  !text 13
-  !text "CH20EDIT",13
-  !text "(C) 2024 DAVEVW.COM"
-  !byte 0
+margin:
+  !byte $92,$20,$20,$20,$00
 
-exit:
-  !byte 13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,0
+done:
+  !byte 147,0
 
 filename:
   !text "@0:FONT.BIN"
