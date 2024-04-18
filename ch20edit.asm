@@ -55,12 +55,7 @@ init_screen:
   jsr strout
 
   ; fill color ram so we can poke characters to video ram to be seen
-  ldy #$00
-  lda $0286
-- sta $9600,y
-  sta $9700,y
-  iny
-  bne -
+  jsr fill_color
 
   lda #$30 ; zero character
   sta $fd  ; init first digit
@@ -109,6 +104,9 @@ main:
 - jsr chkblink
   jsr getkey
   beq - ; no key pressed
+  pha
+  jsr blinkoff
+  pla
 
   cmp #$4e ; 'N' key
   bne ++
@@ -124,9 +122,22 @@ main:
   sta $23
 + bne main
 
+++cmp #$2b ; '+' key
+  bne ++
+  lda $22
+  adc #$7f
+  sta $22
+  bcc main
+  inc $23
+  lda $23
+  cmp #$18
+  bcc main
+  lda #$10
+  sta $23
++ bne main
+
 ++cmp #$42 ; 'B' key
   bne ++
-  sec
   lda $22
   sbc #$08
   sta $22
@@ -139,9 +150,22 @@ main:
   sta $23
   bne main
 
+++cmp #$2D ; '-' key
+  bne ++
+  lda $22
+  sbc #$80
+  sta $22
+  bcs main
+  dec $23
+  lda $23
+  cmp #$10
+  bcs main
+  lda #$17
+  sta $23
+  bne main
+
 ++cmp #$11 ; cursor down key
   bne ++
-  jsr blinkoff
   clc
   lda $29
   adc #22
@@ -159,7 +183,6 @@ main:
 
 ++cmp #$91 ; cursor up key
   bne ++
-  jsr blinkoff
   sec
   lda $29
   sbc #22
@@ -179,7 +202,6 @@ main:
 
 ++cmp #$1D ; cursor right key
   bne ++
-  jsr blinkoff
   inc $29
   clc
   lda $27
@@ -197,7 +219,6 @@ main:
 
 ++cmp #$9D ; cursor left key
   bne ++
-  jsr blinkoff
   dec $29
   dec $27
   bpl +
@@ -209,9 +230,19 @@ main:
   sta $27
 + jmp -
 
+++cmp #$13 ; HOME key
+  bne ++
+  lda #0
+  sta $27
+  sta $28
+  lda #23
+  sta $29
+  lda #$1e
+  sta $2a
+  jmp -
+
 ++cmp #$20 ; space key
   bne ++
-  jsr blinkoff
   ldx $27
   ldy $28
   lda ($22),y
@@ -221,12 +252,15 @@ main:
 
 ++cmp #$03 ; break key
   bne ++
-  jsr blinkoff
   lda $9005
   and #$F0
   ora #$0C
   sta $9005 ; turn on programmable characters
   
+  lda #147
+  jsr charout
+  jsr fill_color
+
   lda #<$1e00
   ldx #>$1e00
   sta $fb
@@ -259,7 +293,6 @@ main:
 
 ++cmp #$53 ; 'S' key
   bne ++
-  jsr blinkoff
   lda #$0d
   jsr charout
   lda #10
@@ -291,7 +324,139 @@ main:
   beq --
   jmp init_screen
 
-++jmp -
+++cmp #$93 ; CLR key
+  bne ++
+  lda #0
+  ldy #7
+--sta ($22),y
+  dey
+  bpl --
+  jmp main
+
+++cmp #$12 ; RVS key
+  bne ++
+  ldy #7
+--lda ($22),y
+  eor #$ff
+  sta ($22),y
+  dey
+  bpl --
+  jmp main
+
+++cmp #$3C ; '<' key
+  bne ++
+  ldy #7
+--lda ($22),y
+  asl
+  sta ($22),y
+  dey
+  bpl --
+  jmp main
+
+++cmp #$3E ; '>' key
+  bne ++
+  ldy #7
+--lda ($22),y
+  lsr
+  sta ($22),y
+  dey
+  bpl --
+  jmp main
+
+++cmp #$56 ; 'v' key
+  bne ++
+  ldy #7
+--dey
+  lda ($22),y
+  iny
+  sta ($22),y
+  dey
+  bpl --
+  iny
+  lda #0
+  sta ($22),y
+  jmp main
+
+++cmp #$5E ; '^' key
+  bne ++
+  ldx #7
+  ldy #0
+--iny
+  lda ($22),y
+  dey
+  sta ($22),y
+  iny
+  dex
+  bne --
+  lda #0
+  sta ($22),y
+  jmp main
+
+++cmp #$46 ; 'F' key
+  bne ++
+  ldy #3
+  sty $ff
+  iny
+  sty $fe
+--ldy $ff
+  lda ($22),y
+  pha
+  ldy $fe
+  lda ($22),y
+  tax
+  pla
+  sta ($22),y
+  ldy $ff
+  txa
+  sta ($22),y
+  inc $fe
+  dec $ff
+  bpl --
+  jmp main
+
+++cmp #$52 ; 'R' key
+  bne ++
+  ldy #0
+---ldx #0
+--lda ($22),y
+  asl
+  sta ($22),y
+  ror $a9,x
+  inx
+  cpx #8
+  bne --
+  iny
+  cpy #8
+  bne ---
+  ldy #7
+--lda $a9,y
+  sta ($22),y
+  dey
+  bpl --
+  jmp main
+
+++cmp #$4d ; 'M' key
+  bne ++
+  ldy #7
+---ldx #7
+--lda ($22),y
+  lsr
+  sta ($22),y
+  lda $a9,y
+  rol
+  sta $a9,y
+  dex
+  bpl --
+  dey
+  bpl ---
+  ldy #7
+--lda $a9,y
+  sta ($22),y
+  dey
+  bpl --
+  ; fall through
+
+++jmp main
 
 strout:
   sta $fb
@@ -407,8 +572,20 @@ blinkoff:
   sta $a3
   rts
 
+fill_color:
+  ldy #$00
+  lda $0286
+- sta $9600,y
+  sta $9700,y
+  iny
+  bne -
+  rts
+
 bitmask:
   !byte $80,$40,$20,$10,$08,$04,$02,$01
+
+invmask:
+  !byte $7f,$cf,$df,$ef,$f7,$fc,$fd,$fe
 
 clear_header:
   !byte $93
@@ -420,18 +597,20 @@ blanks:
   !byte $92,$20,$20,$20,$20,$20,$20,$20,$20,$12,$00
 
 copyright:
-  !text 13,18,"B",146,"ACK ",18,"N",146,"EXT ",18,"S",146,"AVE",13
-  !text 18,"SPACE",146,32,18,"STOP",13
+  !text 13
+  !text 18,"B",146,"ACK",18,"-",146," ",18,"N",146,"EXT",18,"+",146," ",18,"HOME",146," ",18,"CLR",13
+  !text 18,"F",146,"LIP  ",18,"R",146,"OTAT ",18,"M",146,"IRR ",18,"<>",146," ",18,"^V"
+  !text "SPACE",146,32,18,"STOP",146,"  ",18,"RVS",146,"  ",18,"S",146,"AVE "
   !text 13
   !text "CH20EDIT",13
   !text "(C) 2024 DAVEVW.COM"
   !byte 0
 
 exit:
-  !byte 20,20,20,13,13,13,13,0
+  !byte 13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,0
 
 filename:
   !text "@0:FONT.BIN"
 filename_end:
 
-press_key: !text 13, 13, "PRESS ANY KEY", 13, 0
+press_key: !text 13, 13, 18, "PRESS ANY KEY", 13, 0
