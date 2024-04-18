@@ -1,6 +1,6 @@
 # ch20edit for Vic-20 #
 
-Vic-20 (unexpanded) character editor
+Vic-20 (unexpanded) character set editor
 
 Note: saves to FONT.BIN overwriting any existing file.   Manual load required (after exiting program).
 
