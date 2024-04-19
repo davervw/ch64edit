@@ -526,6 +526,7 @@ copy:
 paste:
   bit clipboard_present
   bpl +
+  jsr save_undo
   ldy #7
 --lda clipboard,y
   sta ($22),y
