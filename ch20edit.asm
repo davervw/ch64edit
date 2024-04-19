@@ -54,12 +54,12 @@ begin:
   dec $ff
   bne -
 
+init_screen:
   lda $9005
   and #$F0
   ora #$0C
   sta $9005 ; turn on programmable characters
 
-init_screen:
   lda #<clear_header
   ldx #>clear_header
   jsr strout
