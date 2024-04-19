@@ -6,6 +6,12 @@ getkey = $ffe4
 setlfs = $ffba
 setnam = $ffbd
 fsave = $ffd8
+undo_buffer = $33c
+undo_limit = 24 ; must save extra one space for redo (uses 25)
+undo_count = $a4
+redo_count = $a5
+clipboard = $251
+clipboard_present = $a7
 
 *=$1001
 start:
@@ -15,6 +21,9 @@ start:
 new_start:
 !byte $00,$0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00
 begin:
+  jsr reset_undo
+  clc
+  ror clipboard_present
   lda $2c
   cmp #>new_start
   beq init_screen ; skip one-time init
@@ -115,6 +124,7 @@ main:
   cmp #$4e ; 'N' key
   bne ++
 next_char:
+  jsr reset_undo
   lda $22
   adc #$07
   sta $22
@@ -130,6 +140,7 @@ next_char:
 ++cmp #$2b ; '+' key
   bne ++
 pgup:
+  jsr reset_undo
   lda $22
   adc #$7f
   sta $22
@@ -145,6 +156,7 @@ pgup:
 ++cmp #$42 ; 'B' key
   bne ++
 back_char:
+  jsr reset_undo
   lda $22
   sbc #$08
   sta $22
@@ -160,6 +172,7 @@ back_char:
 ++cmp #$2D ; '-' key
   bne ++
 pgdn:
+  jsr reset_undo
   lda $22
   sbc #$80
   sta $22
@@ -167,10 +180,10 @@ pgdn:
   dec $23
   lda $23
   cmp #$10
-  bcs main
+  bcs +
   lda #$17
   sta $23
-  bne main
++ jmp main
 
 ++cmp #$11 ; cursor down key
   bne ++
@@ -253,7 +266,8 @@ home:
 
 ++cmp #$20 ; space key
   bne ++
-toggle_bit:  
+toggle_bit:
+  jsr save_undo  
   ldx $27
   ldy $28
   lda ($22),y
@@ -282,10 +296,10 @@ bye:
   bne ++
 save_font:
   ldx #13  
-- lda #$0d
+--lda #$0d
   jsr charout
   dex
-  bne -
+  bne --
   lda #10
   sta $39
   lda #0
@@ -318,6 +332,7 @@ save_font:
 ++cmp #$93 ; CLR key
   bne ++
 clear:  
+  jsr save_undo  
   lda #0
   ldy #7
 --sta ($22),y
@@ -328,6 +343,7 @@ clear:
 ++cmp #$12 ; RVS key
   bne ++
 rvs:  
+  jsr save_undo  
   ldy #7
 --lda ($22),y
   eor #$ff
@@ -339,6 +355,7 @@ rvs:
 ++cmp #$3C ; '<' key
   bne ++
 shiftleft:  
+  jsr save_undo  
   ldy #7
 --lda ($22),y
   asl
@@ -350,6 +367,7 @@ shiftleft:
 ++cmp #$3E ; '>' key
   bne ++
 shiftright:  
+  jsr save_undo  
   ldy #7
 --lda ($22),y
   lsr
@@ -358,9 +376,10 @@ shiftright:
   bpl --
   jmp main
 
-++cmp #$56 ; 'v' key
+++cmp #$D6 ; capital 'V' key
   bne ++
 shiftdown:  
+  jsr save_undo  
   ldy #7
 --dey
   lda ($22),y
@@ -376,6 +395,7 @@ shiftdown:
 ++cmp #$5E ; '^' key
   bne ++
 shiftup:  
+  jsr save_undo  
   ldx #7
   ldy #0
 --iny
@@ -392,6 +412,7 @@ shiftup:
 ++cmp #$46 ; 'F' key
   bne ++
 flip:  
+  jsr save_undo  
   ldy #3
   sty $ff
   iny
@@ -415,6 +436,7 @@ flip:
 ++cmp #$52 ; 'R' key
   bne ++
 rotate:  
+  jsr save_undo  
   ldy #0
 ---ldx #0
 --lda ($22),y
@@ -437,6 +459,7 @@ rotate:
 ++cmp #$4d ; 'M' key
   bne ++
 mirror:  
+  jsr save_undo  
   ldy #7
 ---ldx #7
 --lda ($22),y
@@ -462,9 +485,79 @@ toggle_chars:
   lda $9005
   eor #$0C
   sta $9005
-  ; fall through
+  jmp -
 
-++jmp main
+++cmp #$5A ; 'Z' key
+  bne ++
+restore_undo:
+  ldx undo_count
+  beq +
+  lda redo_count
+  bne +++
+  jsr save_undo
+  dec undo_count
+  ldx undo_count
++++inc redo_count
+  dex
+  stx undo_count
+redo_undo:  
+  txa
+  jsr set_undo_ptr
+  ldy #7
+--lda ($fb),y
+  sta ($22),y
+  dey
+  bpl --
++ jmp main
+
+++cmp #$43 ; 'C' key
+  bne ++
+copy:
+  ldy #7
+--lda ($22),y
+  sta clipboard,y
+  dey
+  bpl --
+  sty clipboard_present
+  jmp -
+
+++cmp #$56; 'V' key
+  bne ++
+paste:
+  bit clipboard_present
+  bpl +
+  ldy #7
+--lda clipboard,y
+  sta ($22),y
+  dey
+  bpl --
++ jmp main
+
+++cmp #$58; 'X' key
+  bne ++
+cut:
+  jsr save_undo
+  ldy #7
+--lda ($22),y
+  sta clipboard,y
+  lda #0
+  sta ($22),y
+  dey
+  bpl --
+  sty clipboard_present
+  jmp main
+
+++cmp #$59 ; 'Y' key
+  bne ++
+redo:
+  lda redo_count
+  beq ++
+  dec redo_count
+  inc undo_count
+  ldx undo_count
+  jmp redo_undo
+
+++jmp -
 
 strout:
   sta $fb
@@ -618,6 +711,53 @@ all_chars:
   bne -
   rts
 
+reset_undo:
+  lda #0
+  sta undo_count
+  sta redo_count
+  rts
+
+save_undo:
+  lda undo_count
+  cmp #undo_limit
+  bcc +
+  ; full, so throw away oldest
+  ldx #0
+  ldy #8
+--lda undo_buffer,y
+  sta undo_buffer,x
+  inx
+  iny
+  cpy #$c4
+  bne --
+  ldx #(undo_limit-1)
+  stx undo_count
+  txa
++ jsr set_undo_ptr
+  ldy #7
+- lda ($22),y
+  sta ($fb),y
+  dey
+  bpl -
+  inc undo_count
+  iny
+  sty redo_count
+  clc
+  rts
+
+set_undo_ptr:
+  asl
+  asl
+  asl
+  clc
+  adc #<undo_buffer
+  sta $fb
+  ldx #>undo_buffer
+  bcc +
+  inx
++ stx $fc
+  rts
+
 bitmask:
   !byte $80,$40,$20,$10,$08,$04,$02,$01
 
@@ -633,7 +773,7 @@ lines:
   !text 20,18," CH20EDIT ",0
   !text 20,18," (C) 2024 ",0
   !text 20,18,"DAVEVW.COM",0
-  !text 18,"@",146,"  ",18,"-",146," ",18,"+",13,0
+  !text 18,"@-+",146," ",18,"YZXCV",0
   !text 18,"B",146,"ACK ",18,"N",146,"EXT",0
   !text 18,"F",146,"LIP ",18,"R",146,"OTA",0
   !text 18,"M",146,"IRR ",18,"<>^V",0
