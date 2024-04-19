@@ -8,6 +8,8 @@ Note: saves to FONT.BIN overwriting any existing file.   Manual load required (a
 LOAD "FONT.BIN",8,1
 ``
 
+And wrote a [blog entry](https://techwithdave.davevw.com/2024/04/edit-vic-20-programmable-characters.html).
+
 ![prototype](media/functional.png)
 
 Memory map - Unexpanded Vic-20
