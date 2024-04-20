@@ -1,6 +1,6 @@
-# ch20edit for Vic-20 #
+# ch64edit for C64 #
 
-Vic-20 (unexpanded) character set editor
+C64 character set editor
 
 Note: saves to FONT.BIN overwriting any existing file.   Manual load required (after exiting program).
 
@@ -12,17 +12,11 @@ And wrote a [blog entry](https://techwithdave.davevw.com/2024/04/edit-vic-20-pro
 
 ![prototype](media/functional.png)
 
-Memory map - Unexpanded Vic-20
+Abbreviated Memory map - C64
 
     0000-03FF lower RAM
-    0400-0FFF (unpopulated)
-    1000-17FF character RAM (was program RAM) ****
-    1800-1DFF program RAM (reduced)
-    1E00-1FFF video RAM
-    2000-7FFF (unpopulated)
-    8000-87FF character RAM set 1 (uppercase/graphics)
-    8800-8FFF character RAM set 2 (lowercase/uppercase)
-    9000-9FFF I/O and reserved
-    A000-BFFF (unpopulated, or cartridge ROM)
-    C000-DFFF BASIC ROM
-    E000-FFFF KERNAL ROM
+    0400-07FF video RAM
+    0800-17FF character RAM sets (was program RAM) ****
+    1800-9FFF program RAM (reduced)
+    D000-D7FF character RAM set 1 (uppercase/graphics) -- banked
+    D800-DFFF character RAM set 2 (lowercase/uppercase) -- banked

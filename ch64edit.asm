@@ -1,6 +1,10 @@
-; ch20edit.asm
+; ch64edit.asm
 
-charrom = $8000
+video = $0400
+color_ram = $D800
+columns = 40
+rows = 25
+charrom = $d000
 charout = $ffd2
 getkey = $ffe4
 setlfs = $ffba
@@ -31,21 +35,23 @@ begin:
   lda #>new_start
   sta $2c ; reset basic start
 
-; copy charrom to ram 
+; copy charrom to ram
   lda #0
   sta $fb
   sta $fd
   lda #>(start-1)
   sta $fc
   ldx #>charrom
-  lda $9005
-  and #2
-  beq +
-  ldx #(>charrom) + 8
+  ; lda $9005
+  ; and #2
+  ; beq +
+  ; ldx #(>charrom) + 8
 + stx $fe
-  lda #$08
+  lda #16
   sta $ff ; store count
   ldy #$00
+  sei 
+  jsr bank_charrom
 - lda ($fd),y
   sta ($fb),y
   iny
@@ -54,13 +60,14 @@ begin:
   inc $fe
   dec $ff
   bne -
+  jsr bank_norm
+  cli
 
 init_screen:
-  rts
-  lda $9005
+  lda $D018
   and #$F0
-  ora #$0C
-  sta $9005 ; turn on programmable characters
+  ora #$02
+  sta $D018 ; turn on programmable characters
 
   lda #<clear_header
   ldx #>clear_header
@@ -101,9 +108,9 @@ init_screen:
   sta $27
   lda #0
   sta $28
-  lda #23
+  lda #(columns+1)
   sta $29
-  lda #$1e
+  lda #>video
   sta $2a
   lda #<(start-1)
   sta $22
@@ -113,7 +120,7 @@ init_screen:
 main:
   clc
   lda $a2
-  adc #$1e
+  adc #>video
   sta $a3
   jsr dispchar
 main_save:
@@ -137,9 +144,9 @@ next_char:
   bcc main
   inc $23
   lda $23
-  cmp #$18
+  cmp #>(start+8)
   bcc main
-  lda #$10
+  lda #>start
   sta $23
 + bne main
 
@@ -153,9 +160,9 @@ pgup:
   bcc main
   inc $23
   lda $23
-  cmp #$18
+  cmp #(>start)+8
   bcc main
-  lda #$10
+  lda #>start
   sta $23
 + bne main
 
@@ -169,9 +176,9 @@ back_char:
   bcs main
   dec $23
   lda $23
-  cmp #$10
+  cmp #>start
   bcs main
-  lda #$17
+  lda #(>start)+7
   sta $23
   bne main
 
@@ -185,9 +192,9 @@ pgdn:
   bcs +
   dec $23
   lda $23
-  cmp #$10
+  cmp #>start
   bcs +
-  lda #$17
+  lda #(>start)+7
   sta $23
 + jmp main
 
@@ -195,27 +202,35 @@ pgdn:
   bne ++
 down:
   lda $29
-  adc #21
+  adc #(columns-1)
   sta $29
-  lda $28
+  bcc +
+  inc $2a
+  clc
++ lda $28
   adc #1
   and #7
   sta $28
   bne +
   sec
   lda $29
-  sbc #(22*8)
+  sbc #<(columns*8)
   sta $29
+  lda $2a
+  sbc #>(columns*8)
+  sta $2a
 + jmp main_save
 
 ++cmp #$91 ; cursor up key
   bne ++
 up:
   lda $29
-  sbc #22
+  sbc #columns
   sta $29
+  bcs +
+  dec $2a
   sec
-  lda $28
++ lda $28
   sbc #1
   and #7
   sta $28
@@ -223,8 +238,11 @@ up:
   bne +
   clc
   lda $29
-  adc #(22*8)
+  adc #<(columns*8)
   sta $29
+  lda $2a
+  adc #>(columns*8)
+  sta $2a
 + jmp main_save
 
 ++cmp #$1D ; cursor right key
@@ -264,9 +282,9 @@ home:
   lda #0
   sta $27
   sta $28
-  lda #23
+  lda #(columns+1)
   sta $29
-  lda #$1e
+  lda #>video
   sta $2a
   jmp main_save
 
@@ -284,10 +302,10 @@ toggle_bit:
 ++cmp #$03 ; stop key
   bne ++
 bye:  
-  lda $9005
+  lda $D018
   and #$F0
-  ora #$0C
-  sta $9005 ; turn on programmable characters
+  ora #$02
+  sta $D018 ; turn on programmable characters
   
   lda #<done
   ldx #>done
@@ -488,9 +506,9 @@ mirror:
 ++cmp #$40 ; '@' key
   bne ++
 toggle_chars:
-  lda $9005
-  eor #$0C
-  sta $9005
+  ; lda $9005
+  ; eor #$0C
+  ; sta $9005
   jmp -
 
 ++cmp #$2a ; '*' key
@@ -604,9 +622,9 @@ linesout:
 + rts
 
 dispchar:
-  lda #$17
+  lda #(columns+1)
   sta $24
-  lda #$1e
+  lda #>video
   sta $25
   lda #$08
   sta $ff
@@ -624,9 +642,11 @@ dispchar:
   bne -
   clc
   lda $24
-  adc #$0d
+  adc #(columns-9)
   sta $24
-  iny
+  bcc +
+  inc $25
++ iny
   dec $ff
   bne --
   lda $23
@@ -640,19 +660,25 @@ dispchar:
   ror
   ldx #$0a
   stx $24
+  ldx #>video
+  stx $25
   sec
   ror $ff
   ldy #$00
   jsr disphex
   inc $24
-  clc
+  bne +
+  inc $25
++ clc
   ror $ff
   ldx #$08
 - clc
   lda $24
-  adc #$14
+  adc #(columns-2)
   sta $24
-  lda ($22),y
+  bcc +
+  inc $25
++ lda ($22),y
   jsr disphex
   iny
   dex
@@ -667,7 +693,9 @@ disphex:
   lsr
   jsr dispnybl
   inc $24
-  pla
+  bne +
+  inc $25
++ pla
   and #$0f
   ; fall through
 dispnybl:
@@ -708,15 +736,17 @@ blinkoff:
 fill_color:
   ldy #$00
   lda $0286
-- sta $9600,y
-  sta $9700,y
+- sta color_ram,y
+  sta color_ram+$100,y
+  sta color_ram+$200,y
+  sta color_ram+$300,y
   iny
   bne -
   rts
 
 all_chars:
-  lda #<($1e00+(11*22))
-  ldx #>($1e00+(11*22))
+  lda #<(video+(11*columns))
+  ldx #>(video+(11*columns))
   sta $fb
   stx $fc
   ldy #0
@@ -773,6 +803,19 @@ set_undo_ptr:
 + stx $fc
   rts
 
+bank_norm
+  lda $01
+  ora #$07
+  sta $01
+  rts
+
+bank_charrom ; note caller responsible for disabling/enabling interrupts or equivalent
+  lda $01
+  and #$F8
+  ora #$03
+  sta $01
+  rts
+
 bitmask:
   !byte $80,$40,$20,$10,$08,$04,$02,$01
 
@@ -785,16 +828,16 @@ header:
   !byte $12,$20,$37,$36,$35,$34,$33,$32,$31,$30,$20,$00
 
 lines:
-  !text 20,18," CH20EDIT ",0
-  !text 20,18," (C) 2024 ",0
-  !text 20,18,"DAVEVW.COM",0
-  !text 18,"@-+*YZXCV",0
-  !text 18,"B",146,"ACK ",18,"N",146,"EXT",0
-  !text 18,"F",146,"LIP ",18,"R",146,"OTA",0
-  !text 18,"M",146,"IRR ",18,"<>^V",0
+  !text 20,18," CH64EDIT ",13,0
+  !text 20,18," (C) 2024 ",13,0
+  !text 20,18,"DAVEVW.COM",13,0
+  !text 18,"@-+*YZXCV",13,0
+  !text 18,"B",146,"ACK ",18,"N",146,"EXT",13,0
+  !text 18,"F",146,"LIP ",18,"R",146,"OTA",13,0
+  !text 18,"M",146,"IRR ",18,"<>^V",13,0
   !text 18,"HOME",146," ",18,"CLR",13,0
-  !text 18,"SPACE",146," ",18,"RVS",0
-  !text 18,"STOP",146," ",18,"S",146,"AVE",0
+  !text 18,"SPACE",146," ",18,"RVS",13,0
+  !text 18,"STOP",146," ",18,"S",146,"AVE",13,0
 
 blanks:
   !byte $92,$20,$20,$20,$20,$20,$20,$20,$20,$12,$00
