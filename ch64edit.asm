@@ -14,7 +14,7 @@ clipboard = $251
 clipboard_present = $a7
 save_cursor = $a8
 
-*=$1001
+*=$0801 ; C64 start
 start:
 !byte $0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 
 
@@ -56,6 +56,7 @@ begin:
   bne -
 
 init_screen:
+  rts
   lda $9005
   and #$F0
   ora #$0C
