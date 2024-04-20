@@ -12,6 +12,7 @@ undo_count = $a4
 redo_count = $a5
 clipboard = $251
 clipboard_present = $a7
+save_cursor = $a8
 
 *=$1001
 start:
@@ -114,6 +115,10 @@ main:
   adc #$1e
   sta $a3
   jsr dispchar
+main_save:
+  ldy #0
+  lda ($29),y
+  sta save_cursor
 - jsr chkblink
   jsr getkey
   beq - ; no key pressed
@@ -176,7 +181,7 @@ pgdn:
   lda $22
   sbc #$80
   sta $22
-  bcs main
+  bcs +
   dec $23
   lda $23
   cmp #$10
@@ -200,7 +205,7 @@ down:
   lda $29
   sbc #(22*8)
   sta $29
-+ jmp -
++ jmp main_save
 
 ++cmp #$91 ; cursor up key
   bne ++
@@ -219,7 +224,7 @@ up:
   lda $29
   adc #(22*8)
   sta $29
-+ jmp -
++ jmp main_save
 
 ++cmp #$1D ; cursor right key
   bne ++
@@ -236,7 +241,7 @@ right:
   sta $29
   lda #0
   sta $27
-+ jmp -
++ jmp main_save
 
 ++cmp #$9D ; cursor left key
   bne ++
@@ -250,7 +255,7 @@ left:
   sta $29
   lda #7
   sta $27
-+ jmp -
++ jmp main_save
 
 ++cmp #$13 ; HOME key
   bne ++
@@ -262,7 +267,7 @@ home:
   sta $29
   lda #$1e
   sta $2a
-  jmp -
+  jmp main_save
 
 ++cmp #$20 ; space key
   bne ++
@@ -480,12 +485,21 @@ mirror:
   jmp main
 
 ++cmp #$40 ; '@' key
-toggle_chars:
   bne ++
+toggle_chars:
   lda $9005
   eor #$0C
   sta $9005
   jmp -
+
+++cmp #$2a ; '*' key
+  bne ++
+toggle_pixel_char:
+  lda pixel_char
+  ldx pixel_char_alternate
+  stx pixel_char
+  sta pixel_char_alternate
+  jmp main
 
 ++cmp #$5A ; 'Z' key
   bne ++
@@ -602,7 +616,7 @@ dispchar:
 - lda #$20 ; ' ' space
   asl $26
   bcc +
-  lda #$2a ; '*' asterisk
+  lda pixel_char
 + sta ($24),y
   inc $24
   dex
@@ -682,8 +696,7 @@ chkblink:
 
 blinkoff:
   ldy #0
-  lda ($29),y
-  and #$7f
+  lda save_cursor
   sta ($29),y
   clc
   lda $a2
@@ -774,7 +787,7 @@ lines:
   !text 20,18," CH20EDIT ",0
   !text 20,18," (C) 2024 ",0
   !text 20,18,"DAVEVW.COM",0
-  !text 18,"@-+",146," ",18,"YZXCV",0
+  !text 18,"@-+*YZXCV",0
   !text 18,"B",146,"ACK ",18,"N",146,"EXT",0
   !text 18,"F",146,"LIP ",18,"R",146,"OTA",0
   !text 18,"M",146,"IRR ",18,"<>^V",0
@@ -796,3 +809,7 @@ filename:
 filename_end:
 
 press_key: !text 13, 13, 18, "PRESS ANY KEY", 13, 0
+
+; screen code to display large pixel
+pixel_char: !byte 160
+pixel_char_alternate !byte 42
