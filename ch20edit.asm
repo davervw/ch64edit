@@ -808,7 +808,7 @@ filename:
   !text "@0:FONT.BIN"
 filename_end:
 
-press_key: !text 13, 13, 18, "PRESS ANY KEY", 13, 0
+press_key: !text 13, 13, 18, "ANY KEY", 13, 0
 
 ; screen code to display large pixel
 pixel_char: !byte 160
