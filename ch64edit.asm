@@ -141,11 +141,11 @@ next_char:
   bcc main
   inc $23
   lda $23
-  cmp #>(start+8)
+  cmp #(>start)+8
   bcc main
   lda #>start
   sta $23
-+ bne main
+  bne main
 
 ++cmp #$2b ; '+' key
   bne ++
@@ -161,7 +161,7 @@ pgup:
   bcc main
   lda #>start
   sta $23
-+ bne main
+  bne main
 
 ++cmp #$42 ; 'B' key
   bne ++
