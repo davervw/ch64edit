@@ -124,7 +124,13 @@ main_save:
   ldy #0
   lda ($29),y
   sta save_cursor
-- jsr chkblink
+- lda $D018
+  and #$fe
+  cmp #$10
+  bne +
+  lda #$12
+  sta $D018
++ jsr chkblink
   jsr getkey
   beq - ; no key pressed
   pha
@@ -177,7 +183,7 @@ back_char:
   bcs main
   lda #(>start)+7
   sta $23
-  bne main
+  jmp main
 
 ++cmp #$2D ; '-' key
   bne ++
@@ -588,6 +594,34 @@ redo:
   ldx undo_count
   jmp redo_undo
 
+++cmp #$2F ; '/' key
+  bne ++
+toggle_case:
+  jsr reset_undo
+  lda #<(start-1)
+  ldx #>(start-1)
+  sta $fb
+  stx $fc
+  ldx #(>(start-1))+8
+  sta $fd
+  stx $fe
+  ldx #8
+  stx $ff
+  ldy #0
+--lda ($fb),y
+  tax
+  lda ($fd),y
+  sta ($fb),y
+  txa
+  sta ($fd),y
+  iny
+  bne --
+  inc $fc
+  inc $fe
+  dec $ff
+  bne --
+  jmp main
+
 ++jmp -
 
 strout:
@@ -836,7 +870,7 @@ header:
 
 lines:
   !text 13,0
-  !text 18,"@-+*",146," ",18,"YZXCV",13,0
+  !text 18,"@-+*/YZXCV",13,0
   !text 18,"B",146,"ACK ",18,"R",146,"OTATE",13,0
   !text 18,"N",146,"EXT ",18,"M",146,"IRROR",13,0
   !text 18,"<>^V",146," ",18,"F",146,"LIP",13,0
