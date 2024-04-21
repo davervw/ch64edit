@@ -2,7 +2,9 @@
 
 C64 character set editor
 
-Note: saves to FONT.BIN overwriting any existing file.   Manual load required (after exiting program).
+Hint: SPACE toggles pixel.  Menus are on screen.
+
+Note: saves to FONT.BIN overwriting any existing file.   Manual load from BASIC is initially required to edit a font (after running/initializing program, and exiting).
 
 ``
 LOAD "FONT.BIN",8,1
