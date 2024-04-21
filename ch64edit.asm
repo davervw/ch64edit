@@ -85,8 +85,9 @@ init_screen:
   sta $fd  ; init first digit
   lda #$08
   sta $ff  ; set count
-- lda #$12 ; rvs on
-  jsr charout
+- lda #<left_margin
+  ldx #>left_margin
+  jsr strout
   lda $fd  ; retrieve digit
   jsr charout
   lda #<blanks
@@ -108,7 +109,7 @@ init_screen:
   sta $27
   lda #0
   sta $28
-  lda #(columns+1)
+  lda #(columns+16)
   sta $29
   lda #>video
   sta $2a
@@ -282,7 +283,7 @@ home:
   lda #0
   sta $27
   sta $28
-  lda #(columns+1)
+  lda #(columns+16)
   sta $29
   lda #>video
   sta $2a
@@ -606,8 +607,8 @@ strout:
 
 ; output multiple buffers in a row in subsequent calls, kept track of by b4/b5
 linesout:
-  lda #<margin
-  ldx #>margin
+  lda #<lines_margin
+  ldx #>lines_margin
   jsr strout
   lda $b4
   ldx $b5
@@ -622,7 +623,7 @@ linesout:
 + rts
 
 dispchar:
-  lda #(columns+1)
+  lda #(columns+16)
   sta $24
   lda #>video
   sta $25
@@ -638,7 +639,9 @@ dispchar:
   lda pixel_char
 + sta ($24),y
   inc $24
-  dex
+  bne +
+  inc $25
++ dex
   bne -
   clc
   lda $24
@@ -658,7 +661,7 @@ dispchar:
   ror
   lsr $ff
   ror
-  ldx #$0a
+  ldx #(15+10)
   stx $24
   ldx #>video
   stx $25
@@ -825,6 +828,7 @@ invmask:
 clear_header:
   !byte $93
 header:  
+  !byte $20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20
   !byte $12,$20,$37,$36,$35,$34,$33,$32,$31,$30,$20,$00
 
 lines:
@@ -842,7 +846,10 @@ lines:
 blanks:
   !byte $92,$20,$20,$20,$20,$20,$20,$20,$20,$12,$00
 
-margin:
+left_margin:
+  !byte $20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$12,$00
+
+lines_margin:
   !byte $92,$20,$20,$20,$00
 
 done:
