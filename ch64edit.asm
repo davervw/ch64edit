@@ -42,10 +42,6 @@ begin:
   lda #>(start-1)
   sta $fc
   ldx #>charrom
-  ; lda $9005
-  ; and #2
-  ; beq +
-  ; ldx #(>charrom) + 8
 + stx $fe
   lda #16
   sta $ff ; store count
@@ -507,9 +503,9 @@ mirror:
 ++cmp #$40 ; '@' key
   bne ++
 toggle_chars:
-  ; lda $9005
-  ; eor #$0C
-  ; sta $9005
+  lda $D018
+  eor #$06
+  sta $D018 ; turn on programmable characters
   jmp -
 
 ++cmp #$2a ; '*' key
