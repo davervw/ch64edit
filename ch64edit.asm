@@ -17,6 +17,9 @@ redo_count = $a5
 clipboard = $251
 clipboard_present = $a7
 save_cursor = $a8
+border = 53280
+background = 53281
+foreground = 646
 
 *=$0801 ; C64 start
 start:
@@ -622,6 +625,60 @@ toggle_case:
   bne --
   jmp main
 
+++cmp #$85 ; F1 key
+  bne ++
+inc_foreground:  
+  lda foreground
+--adc #0
+  cmp background
+  beq --
+  sta foreground
+  jsr fill_color
+  jmp -
+
+++cmp #$89 ; F2 key
+  bne ++
+dec_foreground:  
+  lda foreground
+--sbc #1
+  cmp background
+  beq --
+  sta foreground
+  jsr fill_color
+  jmp -
+
+++cmp #$86 ; F3 key
+  bne ++
+inc_background:
+  lda background
+--adc #0
+  cmp foreground
+  beq --
+  sta background
+  jmp -
+
+++cmp #$8a ; F4 key
+  bne ++
+dec_background:
+  lda background
+--sbc #1
+  cmp foreground
+  beq --
+  sta background
+  jmp -
+
+++cmp #$87 ; F5 key
+  bne ++
+inc_border:  
+  inc border
+  jmp -
+
+++cmp #$8b ; F6 key
+  bne ++
+dec_border:  
+  dec border
+  ; fall through
+
 ++jmp -
 
 strout:
@@ -768,7 +825,7 @@ blinkoff:
 
 fill_color:
   ldy #$00
-  lda $0286
+  lda foreground
 - sta color_ram,y
   sta color_ram+$100,y
   sta color_ram+$200,y
@@ -874,10 +931,10 @@ lines:
   !text 18,"B",146,"ACK ",18,"R",146,"OTATE",13,0
   !text 18,"N",146,"EXT ",18,"M",146,"IRROR",13,0
   !text 18,"<>^V",146," ",18,"F",146,"LIP",13,0
+  !text 18,"F1",146," ",18,"F3",146," ",18,"F5",146," ",13,0
   !text 18,"HOME",146," ",18,"CLR",13,0
   !text 18,"RVS",146,"  ",18,"SPACE",13,0
   !text 18,"STOP",146," ",18,"S",146,"AVE",13,0
-  !text 13,0
   !text 13,0
 
 blanks:
