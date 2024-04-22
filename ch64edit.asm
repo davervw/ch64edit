@@ -628,43 +628,43 @@ toggle_case:
 ++cmp #$85 ; F1 key
   bne ++
 inc_foreground:  
+  inc foreground
   lda foreground
---adc #0
-  cmp background
-  beq --
-  sta foreground
+  eor background
+  and #15
+  beq inc_foreground
   jsr fill_color
   jmp -
 
 ++cmp #$89 ; F2 key
   bne ++
-dec_foreground:  
+dec_foreground:
+  dec foreground
   lda foreground
---sbc #1
-  cmp background
-  beq --
-  sta foreground
+  eor background
+  and #15
+  beq dec_foreground
   jsr fill_color
   jmp -
 
 ++cmp #$86 ; F3 key
   bne ++
 inc_background:
+  inc background
   lda background
---adc #0
-  cmp foreground
-  beq --
-  sta background
+  eor foreground
+  and #15
+  beq inc_background
   jmp -
 
 ++cmp #$8a ; F4 key
   bne ++
 dec_background:
+  dec background
   lda background
---sbc #1
-  cmp foreground
-  beq --
-  sta background
+  eor foreground
+  and #15
+  beq inc_background
   jmp -
 
 ++cmp #$87 ; F5 key
