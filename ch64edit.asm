@@ -664,7 +664,7 @@ dec_background:
   lda background
   eor foreground
   and #15
-  beq inc_background
+  beq dec_background
   jmp -
 
 ++cmp #$87 ; F5 key
