@@ -29,9 +29,17 @@ start:
 new_start:
 !byte $00,$0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00
 begin:
+  ; everytime init values
   jsr reset_undo
   clc
   ror clipboard_present
+  clc
+  ror hide_mode
+  lda #<(start-1)
+  sta $22
+  lda #>(start-1)
+  sta $23
+
   lda $2c
   cmp #>new_start
   beq init_screen ; skip one-time init
@@ -68,8 +76,13 @@ init_screen:
   ora #$02
   sta $D018 ; turn on programmable characters
 
-  lda #<clear_header
-  ldx #>clear_header
+  lda #$93
+  jsr charout
+
+  bit hide_mode
+  bmi ++
+  lda #<title_header
+  ldx #>title_header
   jsr strout
   lda #<lines
   ldx #>lines
@@ -102,7 +115,7 @@ init_screen:
   ldx #>header
   jsr strout
   jsr linesout
-  jsr all_chars
+++jsr all_chars
 
   lda #0
   sta $27
@@ -112,10 +125,6 @@ init_screen:
   sta $29
   lda #>video
   sta $2a
-  lda #<(start-1)
-  sta $22
-  lda #>(start-1)
-  sta $23
 
 main:
   clc
@@ -677,7 +686,15 @@ inc_border:
   bne ++
 dec_border:  
   dec border
-  ; fall through
+  jmp ++
+
+++cmp #$48 ; "H" key
+  bne ++
+hide:
+  lda hide_mode
+  eor #$80
+  sta hide_mode
+  jmp init_screen
 
 ++jmp -
 
@@ -739,15 +756,10 @@ dispchar:
 + iny
   dec $ff
   bne --
-  lda $23
-  sta $ff
-  lda $22
-  lsr $ff
-  ror
-  lsr $ff
-  ror
-  lsr $ff
-  ror
+  bit hide_mode
+  bpl +
+  jmp all_chars
++ jsr charptr_to_offset
   ldx #(15+10)
   stx $24
   ldx #>video
@@ -839,7 +851,18 @@ all_chars:
   ldx #>(video+(11*columns))
   sta $fb
   stx $fc
+  bit hide_mode
+  bpl +
   ldy #0
+  lda #$20
+- sta ($fb),y
+  iny
+  bne -
+  jsr charptr_to_offset
+  tay
+  sta ($fb),y
+  rts
++ ldy #0
 - tya
   sta ($fb),y
   iny
@@ -906,14 +929,25 @@ bank_charrom ; note caller responsible for disabling/enabling interrupts or equi
   sta $01
   rts
 
+charptr_to_offset:
+  lda $23
+  sta $ff
+  lda $22
+  lsr $ff
+  ror
+  lsr $ff
+  ror
+  lsr $ff
+  ror
+  rts
+
 bitmask:
   !byte $80,$40,$20,$10,$08,$04,$02,$01
 
 invmask:
   !byte $7f,$cf,$df,$ef,$f7,$fc,$fd,$fe
 
-clear_header:
-  !byte $93
+title_header:
   !text 13
   !text " ",18,"  CH64EDIT  ",13
   !text " ",18,"  (C) 2024  ",13
@@ -935,7 +969,7 @@ lines:
   !text 18,"HOME",146," ",18,"CLR",13,0
   !text 18,"RVS",146,"  ",18,"SPACE",13,0
   !text 18,"STOP",146," ",18,"S",146,"AVE",13,0
-  !text 13,0
+  !text 18,"H",146,"IDE",13,0
 
 blanks:
   !byte $92,$20,$20,$20,$20,$20,$20,$20,$20,$12,$00
@@ -958,3 +992,4 @@ press_key: !text 13, 13, 18, "PRESS ANY KEY", 13, 0
 ; screen code to display large pixel
 pixel_char: !byte 160
 pixel_char_alternate !byte 42
+hide_mode: !byte 0
