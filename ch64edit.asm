@@ -19,19 +19,21 @@ jiffyblink = $a3
 undo_count = $a4
 redo_count = $a5
 clipboard = $251
-clipboard_present = $a7
-save_cursor = $a8
-tempbuff = $a9 ; 8 bytes free to use temporarily a9-b0
-lineptr = $b4
+clipboard_present = $a6
+save_cursor = $a7
+tempbuff = $a8 ; 8 bytes free to use temporarily a8-af
+colorptr = $b0
+pixelcolorptr = $b2 ; pointer to pixel cursor in color ram
+lineptr = $b4 ; used with linesout
 border = 53280
 background = 53281
 foreground = 646
-charptr = $22
-cursorptr = $24
+charptr = $22 ; pointer to character image data for display/edit
+dispptr = $24 ; pointer to screen for displaying pixels and hex values
 temp2 = $26
-pixelx = $27
-pixely = $28
-pixelptr = $29
+pixelx = $27 ; left(0) to right(7)
+pixely = $28 ; up(0) to down(7)
+pixelptr = $29 ; pointer to pixel cursor in video ram
 basicstartptr = $2b ; 43/44
 ptr1 = $fb
 ptr2 = $fd
@@ -61,6 +63,7 @@ begin:
   sta charptr
   lda #>(start-1)
   sta charptr+1
+  jsr set_inverse_cursor
 
 ; setup values for different charsets
   lda $D018
@@ -140,9 +143,7 @@ init_screen:
   inc ptr2  ; ++digit
   dec temp  ; --count
   bne -
-  lda #<header
-  ldx #>header
-  jsr strout
+  jsr draw_header
   jsr linesout
 ++jsr all_chars
 
@@ -151,9 +152,12 @@ init_screen:
   lda #0
   sta pixely
   lda #(columns+16)
+  ldx #>video
   sta pixelptr
-  lda #>video
-  sta pixelptr+1
+  stx pixelptr+1
+  ldx #>(color_ram)
+  sta pixelcolorptr
+  stx pixelcolorptr+1
 
 main:
   clc
@@ -248,8 +252,10 @@ down:
   lda pixelptr
   adc #(columns-1)
   sta pixelptr
+  sta pixelcolorptr
   bcc +
   inc pixelptr+1
+  inc pixelcolorptr+1
   clc
 + lda pixely
   adc #1
@@ -260,9 +266,13 @@ down:
   lda pixelptr
   sbc #<(columns*8)
   sta pixelptr
+  sta pixelcolorptr
   lda pixelptr+1
   sbc #>(columns*8)
   sta pixelptr+1
+  lda pixelcolorptr+1
+  sbc #>(columns*8)
+  sta pixelcolorptr+1
 + jmp main_save
 
 ++cmp #$91 ; cursor up key
@@ -271,8 +281,10 @@ up:
   lda pixelptr
   sbc #columns
   sta pixelptr
+  sta pixelcolorptr
   bcs +
   dec pixelptr+1
+  dec pixelcolorptr+1
   sec
 + lda pixely
   sbc #1
@@ -284,15 +296,20 @@ up:
   lda pixelptr
   adc #<(columns*8)
   sta pixelptr
+  sta pixelcolorptr
   lda pixelptr+1
   adc #>(columns*8)
   sta pixelptr+1
+  lda pixelcolorptr+1
+  adc #>(columns*8)
+  sta pixelcolorptr+1
 + jmp main_save
 
 ++cmp #$1D ; cursor right key
   bne ++
 right:
   inc pixelptr
+  inc pixelcolorptr
   lda pixelx
   adc #0
   sta pixelx
@@ -302,6 +319,7 @@ right:
   lda pixelptr
   sbc #8
   sta pixelptr
+  sta pixelcolorptr
   lda #0
   sta pixelx
 + jmp main_save
@@ -310,12 +328,14 @@ right:
   bne ++
 left:  
   dec pixelptr
+  dec pixelcolorptr
   dec pixelx
   bpl +
   clc
   lda pixelptr
   adc #8
   sta pixelptr
+  sta pixelcolorptr
   lda #7
   sta pixelx
 + jmp main_save
@@ -328,8 +348,11 @@ home:
   sta pixely
   lda #(columns+16)
   sta pixelptr
+  sta pixelcolorptr
   lda #>video
   sta pixelptr+1
+  lda #>color_ram
+  sta pixelcolorptr+1
   jmp main_save
 
 ++cmp #spacechar ; space key
@@ -566,8 +589,18 @@ toggle_chars:
 toggle_pixel_char:
   lda pixel_char
   ldx pixel_char_alternate
+  ldy pixel_char_alternate2
   stx pixel_char
-  sta pixel_char_alternate
+  sty pixel_char_alternate
+  sta pixel_char_alternate2
+  lda pixel_space
+  ldx pixel_space_alternate
+  ldy pixel_space_alternate2
+  stx pixel_space
+  sty pixel_space_alternate
+  sta pixel_space_alternate2
+  jsr set_inverse_cursor
+  jsr redraw_header
   jmp main
 
 ++cmp #$5A ; 'Z' key
@@ -679,17 +712,18 @@ inc_foreground:
   and #15
   beq inc_foreground
   jsr fill_color
+  jsr dispchar
   jmp -
 
 ++cmp #$89 ; F2 key
   bne ++
-dec_foreground:
-  dec foreground
-  lda foreground
-  eor background
+inc_cursor:
+  inc pixel_cursor_color
+  lda background
   and #15
-  beq dec_foreground
-  jsr fill_color
+  eor pixel_cursor_color
+  beq inc_cursor
+  jsr dispchar
   jmp -
 
 ++cmp #$86 ; F3 key
@@ -723,6 +757,28 @@ inc_border:
 dec_border:  
   dec border
   jmp ++
+
+++cmp #$88 ; F7 key
+  bne ++
+inc_pixel:
+  inc pixel_char_color
+  lda background
+  and #15
+  eor pixel_char_color
+  beq inc_pixel
+  jsr dispchar
+  jmp -
+
+++cmp #$8c ; F8 key
+  bne ++
+inc_space:
+  inc pixel_space_color
+  lda pixel_space_color
+  eor background
+  and #15
+  beq inc_space
+  jsr dispchar
+  jmp -
 
 ++cmp #$48 ; "H" key
   bne ++
@@ -764,31 +820,42 @@ linesout:
 
 dispchar:
   lda #(columns+16)
-  sta cursorptr
-  lda #>video
-  sta cursorptr+1
+  ldx #>video
+  sta dispptr
+  stx dispptr+1
+  ldx #>color_ram
+  sta colorptr
+  stx colorptr+1
   lda #$08
   sta temp
   ldy #$00
 --ldx #$08
   lda (charptr),y
   sta temp2
-- lda #spacechar
+- lda pixel_space_color
+  sta (colorptr),y
+  lda pixel_space
   asl temp2
   bcc +
+  lda pixel_char_color
+  sta (colorptr),y
   lda pixel_char
-+ sta (cursorptr),y
-  inc cursorptr
++ sta (dispptr),y
+  inc dispptr
+  inc colorptr
   bne +
-  inc cursorptr+1
+  inc dispptr+1
+  inc colorptr+1
 + dex
   bne -
   clc
-  lda cursorptr
+  lda dispptr
   adc #(columns-9)
-  sta cursorptr
+  sta dispptr
+  sta colorptr
   bcc +
-  inc cursorptr+1
+  inc dispptr+1
+  inc colorptr+1
 + iny
   dec temp
   bne --
@@ -797,46 +864,63 @@ dispchar:
   jmp all_chars
 + jsr charptr_to_offset
   ldx #(15+10)
-  stx cursorptr
+  stx dispptr
+  stx colorptr
   ldx #>video
-  stx cursorptr+1
+  stx dispptr+1
+  ldx #>color_ram
+  stx colorptr+1
   sec
-  ror temp
+  ror temp ; set inverse flag for disp_hex
   ldy #$00
-  jsr disphex
-  inc cursorptr
+  jsr disp_hex
+  inc dispptr
+  inc colorptr
   bne +
-  inc cursorptr+1
+  inc dispptr+1
+  inc colorptr+1
 + clc
-  ror temp
+  ror temp ; clear inverse flag for disp_hex
   ldx #$08
 - clc
-  lda cursorptr
-  adc #(columns-2)
-  sta cursorptr
+  lda dispptr
+  adc #(columns-3)
+  sta dispptr
+  sta colorptr
   bcc +
-  inc cursorptr+1
+  inc dispptr+1
+  inc colorptr+1
++ lda border_char
+  bit inverse_cursor
+  bmi +
+  lda #229 ; inverse leftmost vertical bar
++ sta (dispptr),y
+  inc dispptr
+  bne +
+  inc dispptr+1
 + lda (charptr),y
-  jsr disphex
+  jsr disp_hex
   iny
   dex
   bne -
   rts
 
-disphex:
+disp_hex:
   pha
   lsr
   lsr
   lsr
   lsr
-  jsr dispnybl
-  inc cursorptr
+  jsr disp_nybble
+  inc dispptr
+  inc colorptr
   bne +
-  inc cursorptr+1
+  inc dispptr+1
+  inc colorptr+1
 + pla
   and #$0f
   ; fall through
-dispnybl:
+disp_nybble:
   ora #$30 ; '0' screen code
   cmp #$3a
   bcc +    ; branch if less
@@ -844,27 +928,39 @@ dispnybl:
 + bit temp
   bpl +
   ora #$80 ; reverse text
-+ sta (cursorptr),y
++ sta (dispptr),y
   rts
 
 chkblink:
   sec
   lda jiffyblink
   cmp jiffyclock
-  bne +
+  bne ++
   lda jiffyclock
   adc #$1d
   sta jiffyblink
   ldy #0
+  lda pixel_char_color
+  bit inverse_cursor
+  bpl +
   lda (pixelptr),y
   eor #$80
   sta (pixelptr),y
-+ rts
+--lda pixel_cursor_color
+- sta (pixelcolorptr),y
+  rts
++ lda (pixelcolorptr),y
+  and #15
+  cmp pixel_cursor_color
+  bne --
+  jsr restore_cursor_color
+++rts
 
 blinkoff:
   ldy #0
   lda save_cursor
   sta (pixelptr),y
+  jsr restore_cursor_color
   clc
   lda jiffyclock
   adc #2
@@ -1149,11 +1245,50 @@ restore_scanline_choices:
   sta choose_charset2
   rts 
 
+set_inverse_cursor:
+  lda #$80
+  sta inverse_cursor
+  lda pixel_char
+  cmp pixel_space
+  bne +
+  lsr inverse_cursor
++ rts
+
+restore_cursor_color:
+  ldy pixely
+  lda (charptr),y
+  ldx pixelx
+  and bitmask, x
+  cmp #1 ; set C if pixel is on
+  lda pixel_space_color
+  bcc +
+  lda pixel_char_color
++ ldy #0
+  sta (pixelcolorptr),y
+  rts
+
+redraw_header:
+  lda #<pre_repeat_header
+  ldx #>pre_repeat_header
+  jsr strout
+  jsr draw_header
+  lda #$92
+  jmp charout
+
+draw_header:
+  lda #<header
+  ldx #>header
+  bit inverse_cursor
+  bmi +
+  lda #<other_header
+  ldx #>other_header
++ jmp strout
+
 bitmask:
   !byte $80,$40,$20,$10,$08,$04,$02,$01
 
 invmask:
- !byte $7f,$cf,$df,$ef,$f7,$fc,$fd,$fe
+  !byte $7f,$cf,$df,$ef,$f7,$fc,$fd,$fe
 
 title_header:
   !text 13
@@ -1165,7 +1300,16 @@ title_header:
   !text $13
 header:  
   !byte $20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20
-  !byte $12,$20,$37,$36,$35,$34,$33,$32,$31,$30,$20,$00
+  !byte $12,$20,$37,$36,$35,$34,$33,$32,$31,$30,$20
+  !byte 0
+
+other_header:
+  !byte $20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20
+  !byte $12,$20,$A3,$A3,$A3,$A3,$A3,$A3,$A3,$A3,$20
+  !byte 0
+
+pre_repeat_header:
+  !byte $13,$92,$11,$11,$11,$11,$11,$11,$11,$11,$11,0
 
 lines:
   !text 13,0
@@ -1173,12 +1317,12 @@ lines:
   !text 18,"B",146,"ACK ",18,"R",146,"OTATE",13,0
   !text 18,"N",146,"EXT ",18,"M",146,"IRROR",13,0
   !text 18,"<>^V",146," ",18,"F",146,"LIP",13,0
-  !text 18,"F1",146," ",18,"F3",146," ",18,"F5",146," ",13,0
+  !text 18,"F1",146,"-",18,"F8",146," ",18,"H",146,"IDE",13,0
   !text 18,"HOME",146," ",18,"CLR",13,0
   !text 18,"RVS",146,"  ",18,"SPACE",13,0
   !text 18,"STOP",146," ",18,"S",146,"AVE",13,0
-  !text 18,"H",146,"IDE",13,0
-
+  !text 0
+  
 blanks:
   !byte $92,$20,$20,$20,$20,$20,$20,$20,$20,$12,$00
 
@@ -1198,9 +1342,18 @@ filename_end:
 press_key: !text 13, 13, 18, "PRESS ANY KEY", 13, 0
 
 ; screen code to display large pixel
-;pixel_space: !byte 32
+pixel_space: !byte 32
+pixel_space_alternate !byte 32
+pixel_space_alternate2 !byte 207
 pixel_char: !byte 160 ; reverse space screen code
 pixel_char_alternate !byte starchar
+pixel_char_alternate2 !byte 207
+border_char !byte 160
+
+pixel_space_color !byte 14
+pixel_char_color !byte 0
+pixel_cursor_color !byte 1
+inverse_cursor !byte 0x80
 
 hide_mode: !byte 0
 
