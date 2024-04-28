@@ -341,11 +341,11 @@ bye:
 ++cmp #$53 ; 'S' key
   bne ++
 save_font:
-  ldx #13  
---lda #$0d
+  jsr save_scanline_choices
+  ; clear screen
+  lda #$93
   jsr charout
-  dex
-  bne --
+  ; setup and save
   lda #10
   sta $39
   lda #0
@@ -368,11 +368,13 @@ save_font:
   ldx #<(new_start)
   ldy #>(new_start)
   jsr fsave
+  ; prompt
   lda #<press_key
   ldx #>press_key
   jsr strout
 --jsr getkey
   beq --
+  jsr restore_scanline_choices
   jmp init_screen
 
 ++cmp #$93 ; CLR key
@@ -1106,6 +1108,24 @@ choose_rom_only_sets:
   sta choose_charset2
   rts
 
+save_scanline_choices:
+  ; remember scanline interrupt fonts, switch to one ROM set only during save
+  lda choose_charset1
+  sta save_choose_charset1
+  lda choose_charset2
+  sta save_choose_charset2
+  lda choose_charset_rom
+  sta choose_charset1
+  sta choose_charset2
+  rts
+
+restore_scanline_choices:
+  lda save_choose_charset1
+  sta choose_charset1
+  lda save_choose_charset2
+  sta choose_charset2
+  rts 
+
 bitmask:
   !byte $80,$40,$20,$10,$08,$04,$02,$01
 
@@ -1166,3 +1186,5 @@ vicpage: !byte 16
 choose_charset_rom: !byte 16+4
 choose_charset1: !byte 16+2
 choose_charset2: !byte 16+14
+save_choose_charset1: !byte 0
+save_choose_charset2: !byte 0
