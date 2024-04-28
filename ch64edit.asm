@@ -40,6 +40,16 @@ begin:
   lda #>(start-1)
   sta $23
 
+; setup values for different charsets
+  lda $D018
+  and #$F0
+  sta vicpage
+  ora #4
+  sta choose_charset_rom
+  jsr choose_rom_ram_sets
+
+  jsr init_irq_scanline
+
   lda $2c
   cmp #>new_start
   beq init_screen ; skip one-time init
@@ -69,13 +79,9 @@ begin:
   bne -
   jsr bank_norm
   cli
+  jsr set2copyfordisplay
 
 init_screen:
-  lda $D018
-  and #$F0
-  ora #$02
-  sta $D018 ; turn on programmable characters
-
   lda #$93
   jsr charout
 
@@ -317,11 +323,12 @@ toggle_bit:
 ++cmp #$03 ; stop key
   bne ++
 bye:  
-  lda $D018
-  and #$F0
-  ora #$02
+  lda choose_charset1
   sta $D018 ; turn on programmable characters
   
+  clc
+  lsr hide_mode
+
   lda #<done
   ldx #>done
   jsr strout
@@ -521,9 +528,12 @@ mirror:
 ++cmp #$40 ; '@' key
   bne ++
 toggle_chars:
-  lda $D018
-  eor #$06
-  sta $D018 ; turn on programmable characters
+  lda choose_charset1
+  cmp choose_charset_rom
+  beq +
+  jsr choose_rom_only_sets
+  jmp -
++ jsr choose_rom_ram_sets
   jmp -
 
 ++cmp #$2a ; '*' key
@@ -632,6 +642,7 @@ toggle_case:
   inc $fe
   dec $ff
   bne --
+  jsr set2copyfordisplay
   jmp main
 
 ++cmp #$85 ; F1 key
@@ -862,12 +873,21 @@ all_chars:
   tay
   sta ($fb),y
   rts
-+ ldy #0
++ jsr disp_char_set
+  bit hide_mode
+  bmi +
+  lda #<(video+(18*columns))
+  ldx #>(video+(18*columns))
+  sta $fb
+  stx $fc
+; continues
+disp_char_set:
+  ldy #0
 - tya
   sta ($fb),y
   iny
   bne -
-  rts
++ rts
 
 reset_undo:
   lda #0
@@ -941,6 +961,151 @@ charptr_to_offset:
   ror
   rts
 
+set2copyfordisplay:
+  ; also copy second set to $3800 for VIC-II raster interrupt display
+  ; (because $1000 RAM can't be displayed by VIC-II, shows ROM instead)
+  lda #<(start-1+2048)
+  ldx #>(start-1+2048)
+  sta $fb
+  stx $fc
+  ldx #$38
+  sta $fd
+  stx $fe
+  ldx #8
+  stx $ff
+  ldy #0
+--lda ($fb),y
+  sta ($fd),y
+  iny
+  bne --
+  inc $fc
+  inc $fe
+  dec $ff
+  bne --
+  rts
+
+irq_scanline:
+  bit $d019 ; vic-ii irq status
+  bmi + ; branch if not a vic-ii irq
+jmp_orig_irq:
+  jmp $ea31 ; resume IRQ (note: self modifying code, see init_irq_scanline)
++ lda $d019
+  and #$01
+  beq jmp_orig_irq ; branch if not a scanline irq
+
+  lda scanline_set
+  bpl +
+
+- lda $d012 ; vic-ii scanline
+  cmp #$c2
+  bcc -
+  ldx #$0a
+- dex
+  bne -
+  lda choose_charset2 ; show second RAM charset
+  sta $d018
+  lda #$00
+  sta $d012
+  sta scanline_set
+
+  ; vic-ii scanline 8th bit cleared
+  lda $d011
+  and #$7f
+  sta $d011
+
+  lda #$01
+  sta $d019
+  jmp ++
+
++ beq +
+
+; approaching 8A scanline
+- lda $d012 ; vic-ii scanline
+  cmp #$8a
+  bcc -
+  ldx #$0a
+- dex
+  bne -
+  lda choose_charset1 ; show first RAM charset
+  sta $d018
+  lda #$a4
+  sta $d012
+  sta scanline_set
+
+  ; vic-ii scanline 8th bit cleared
+  lda $d011
+  and #$7f
+  sta $d011
+
+  lda #$01
+  sta $d019
+  jmp ++
+
+  ; zero scanline
++ lda choose_charset_rom ; show ROM charset
+  sta $d018
+  lda #$68
+  sta $d012
+  sta scanline_set
+
+  ; vic-ii scanline 8th bit cleared
+  lda $d011
+  and #$7f
+  sta $d011
+
+  lda #$01
+  sta $d019
+
+; return from ROM IRQ handler
+++pla
+  tay
+  pla
+  tax
+  pla
+  rti
+
+init_irq_scanline:  
+  sei ; disallow IRQ
+  lda #$00 ; rotatable high bit in enabled state
+  sta scanline_set
+  lda #$00
+  sta $d012
+  lda $d011
+  and #$7f
+  sta $d011
+  lda $0314
+  ldx $0315
+  cpx #>irq_scanline
+  beq + ; branch if already set
+  sta jmp_orig_irq+1
+  stx jmp_orig_irq+2
+  lda #<irq_scanline
+  ldx #>irq_scanline
+  sta $0314
+  stx $0315
++ lda $d01a
+  ora #$01
+  sta $d01a
+  cli ; re-enable IRQ
+  rts
+
+choose_rom_ram_sets:
+  lda choose_charset_rom
+  and #$F0
+  ora #$02
+  sta choose_charset1
+  and #$F0
+  ora #14
+  sta choose_charset2
+  rts
+
+choose_rom_only_sets:
+  lda choose_charset_rom
+  sta choose_charset1
+  ora #2
+  sta choose_charset2
+  rts
+
 bitmask:
   !byte $80,$40,$20,$10,$08,$04,$02,$01
 
@@ -992,4 +1157,12 @@ press_key: !text 13, 13, 18, "PRESS ANY KEY", 13, 0
 ; screen code to display large pixel
 pixel_char: !byte 160
 pixel_char_alternate !byte 42
+
 hide_mode: !byte 0
+
+scanline_set: !byte 0
+
+vicpage: !byte 16
+choose_charset_rom: !byte 16+4
+choose_charset1: !byte 16+2
+choose_charset2: !byte 16+14
