@@ -4,30 +4,52 @@ video = $0400
 color_ram = $D800
 columns = 40
 rows = 25
+
 charrom = $d000
 charout = $ffd2
 getkey = $ffe4
 setlfs = $ffba
 setnam = $ffbd
 fsave = $ffd8
+
 undo_buffer = $33c
 undo_limit = 24 ; must save extra one space for redo (uses 25)
+jiffyclock = $a2 ; increased by one every 1/60 of a second
+jiffyblink = $a3
 undo_count = $a4
 redo_count = $a5
 clipboard = $251
 clipboard_present = $a7
 save_cursor = $a8
+tempbuff = $a9 ; 8 bytes free to use temporarily a9-b0
+lineptr = $b4
 border = 53280
 background = 53281
 foreground = 646
+charptr = $22
+cursorptr = $24
+temp2 = $26
+pixelx = $27
+pixely = $28
+pixelptr = $29
+basicstartptr = $2b ; 43/44
+ptr1 = $fb
+ptr2 = $fd
+temp = $ff
+
+clearchar = $93
+spacechar = $20
+starchar = $2a ; asterisk
 
 *=$0801 ; C64 start
 start:
-!byte $0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 
+!byte $0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 ; 10 SYS6157 (without leading zero)
+
+; 0800-17ff is reserved for editable character images, will be initialized from charrom $D000 for one-time initialization
 
 *=$1800
 new_start:
-!byte $00,$0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00
+!byte $00,$0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 ; 10 SYS6157 (with leading zero)
 begin:
   ; everytime init values
   jsr reset_undo
@@ -36,9 +58,9 @@ begin:
   clc
   ror hide_mode
   lda #<(start-1)
-  sta $22
+  sta charptr
   lda #>(start-1)
-  sta $23
+  sta charptr+1
 
 ; setup values for different charsets
   lda $D018
@@ -50,39 +72,40 @@ begin:
 
   jsr init_irq_scanline
 
-  lda $2c
+  lda basicstartptr+1
   cmp #>new_start
   beq init_screen ; skip one-time init
   lda #>new_start
-  sta $2c ; reset basic start
+  sta basicstartptr+1 ; reset basic start
+  ; TODO: make sure basicstartptr set to 1
 
 ; copy charrom to ram
   lda #0
-  sta $fb
-  sta $fd
+  sta ptr1
+  sta ptr2
   lda #>(start-1)
-  sta $fc
+  sta ptr1+1
   ldx #>charrom
-+ stx $fe
++ stx ptr2+1
   lda #16
-  sta $ff ; store count
+  sta temp ; store count
   ldy #$00
   sei 
   jsr bank_charrom
-- lda ($fd),y
-  sta ($fb),y
+- lda (ptr2),y
+  sta (ptr1),y
   iny
   bne -
-  inc $fc
-  inc $fe
-  dec $ff
+  inc ptr1+1
+  inc ptr2+1
+  dec temp
   bne -
   jsr bank_norm
   cli
   jsr set2copyfordisplay
 
 init_screen:
-  lda #$93
+  lda #clearchar
   jsr charout
 
   bit hide_mode
@@ -92,30 +115,30 @@ init_screen:
   jsr strout
   lda #<lines
   ldx #>lines
-  sta $b4
-  stx $b5
+  sta lineptr
+  stx lineptr+1
   jsr linesout
 
   ; fill color ram so we can poke characters to video ram to be seen
   jsr fill_color
 
   lda #$30 ; zero character
-  sta $fd  ; init first digit
+  sta ptr2  ; init first digit
   lda #$08
-  sta $ff  ; set count
+  sta temp  ; set count
 - lda #<left_margin
   ldx #>left_margin
   jsr strout
-  lda $fd  ; retrieve digit
+  lda ptr2  ; retrieve digit
   jsr charout
   lda #<blanks
   ldx #>blanks
   jsr strout
-  lda #$20 ; space
+  lda #spacechar
   jsr charout
   jsr linesout
-  inc $fd  ; ++digit
-  dec $ff  ; --count
+  inc ptr2  ; ++digit
+  dec temp  ; --count
   bne -
   lda #<header
   ldx #>header
@@ -124,26 +147,26 @@ init_screen:
 ++jsr all_chars
 
   lda #0
-  sta $27
+  sta pixelx
   lda #0
-  sta $28
+  sta pixely
   lda #(columns+16)
-  sta $29
+  sta pixelptr
   lda #>video
-  sta $2a
+  sta pixelptr+1
 
 main:
   clc
-  lda $a2
+  lda jiffyclock
   adc #>video
-  sta $a3
+  sta jiffyblink
   jsr dispchar
 main_save:
   ldy #0
-  lda ($29),y
+  lda (pixelptr),y
   sta save_cursor
 - lda $D018
-  and #$fe
+  and #ptr2+1
   cmp #$10
   bne +
   lda #$12
@@ -159,165 +182,165 @@ main_save:
   bne ++
 next_char:
   jsr reset_undo
-  lda $22
+  lda charptr
   adc #$07
-  sta $22
+  sta charptr
   bcc main
-  inc $23
-  lda $23
+  inc charptr+1
+  lda charptr+1
   cmp #(>start)+8
   bcc main
   lda #>start
-  sta $23
+  sta charptr+1
   bne main
 
 ++cmp #$2b ; '+' key
   bne ++
 pgup:
   jsr reset_undo
-  lda $22
+  lda charptr
   adc #$7f
-  sta $22
+  sta charptr
   bcc main
-  inc $23
-  lda $23
+  inc charptr+1
+  lda charptr+1
   cmp #(>start)+8
   bcc main
   lda #>start
-  sta $23
+  sta charptr+1
   bne main
 
 ++cmp #$42 ; 'B' key
   bne ++
 back_char:
   jsr reset_undo
-  lda $22
+  lda charptr
   sbc #$08
-  sta $22
+  sta charptr
   bcs main
-  dec $23
-  lda $23
+  dec charptr+1
+  lda charptr+1
   cmp #>start
   bcs main
   lda #(>start)+7
-  sta $23
+  sta charptr+1
   jmp main
 
 ++cmp #$2D ; '-' key
   bne ++
 pgdn:
   jsr reset_undo
-  lda $22
+  lda charptr
   sbc #$80
-  sta $22
+  sta charptr
   bcs +
-  dec $23
-  lda $23
+  dec charptr+1
+  lda charptr+1
   cmp #>start
   bcs +
   lda #(>start)+7
-  sta $23
+  sta charptr+1
 + jmp main
 
 ++cmp #$11 ; cursor down key
   bne ++
 down:
-  lda $29
+  lda pixelptr
   adc #(columns-1)
-  sta $29
+  sta pixelptr
   bcc +
-  inc $2a
+  inc pixelptr+1
   clc
-+ lda $28
++ lda pixely
   adc #1
   and #7
-  sta $28
+  sta pixely
   bne +
   sec
-  lda $29
+  lda pixelptr
   sbc #<(columns*8)
-  sta $29
-  lda $2a
+  sta pixelptr
+  lda pixelptr+1
   sbc #>(columns*8)
-  sta $2a
+  sta pixelptr+1
 + jmp main_save
 
 ++cmp #$91 ; cursor up key
   bne ++
 up:
-  lda $29
+  lda pixelptr
   sbc #columns
-  sta $29
+  sta pixelptr
   bcs +
-  dec $2a
+  dec pixelptr+1
   sec
-+ lda $28
++ lda pixely
   sbc #1
   and #7
-  sta $28
+  sta pixely
   cmp #7
   bne +
   clc
-  lda $29
+  lda pixelptr
   adc #<(columns*8)
-  sta $29
-  lda $2a
+  sta pixelptr
+  lda pixelptr+1
   adc #>(columns*8)
-  sta $2a
+  sta pixelptr+1
 + jmp main_save
 
 ++cmp #$1D ; cursor right key
   bne ++
 right:
-  inc $29
-  lda $27
+  inc pixelptr
+  lda pixelx
   adc #0
-  sta $27
+  sta pixelx
   and #7
   bne +
   sec
-  lda $29
+  lda pixelptr
   sbc #8
-  sta $29
+  sta pixelptr
   lda #0
-  sta $27
+  sta pixelx
 + jmp main_save
 
 ++cmp #$9D ; cursor left key
   bne ++
 left:  
-  dec $29
-  dec $27
+  dec pixelptr
+  dec pixelx
   bpl +
   clc
-  lda $29
+  lda pixelptr
   adc #8
-  sta $29
+  sta pixelptr
   lda #7
-  sta $27
+  sta pixelx
 + jmp main_save
 
 ++cmp #$13 ; HOME key
   bne ++
 home:  
   lda #0
-  sta $27
-  sta $28
+  sta pixelx
+  sta pixely
   lda #(columns+16)
-  sta $29
+  sta pixelptr
   lda #>video
-  sta $2a
+  sta pixelptr+1
   jmp main_save
 
-++cmp #$20 ; space key
+++cmp #spacechar ; space key
   bne ++
 toggle_bit:
   jsr save_undo  
-  ldx $27
-  ldy $28
-  lda ($22),y
+  ldx pixelx
+  ldy pixely
+  lda (charptr),y
   eor bitmask,x
-  sta ($22),y
+  sta (charptr),y
   jmp main
 
 ++cmp #$03 ; stop key
@@ -343,7 +366,7 @@ bye:
 save_font:
   jsr save_scanline_choices
   ; clear screen
-  lda #$93
+  lda #clearchar
   jsr charout
   ; setup and save
   lda #10
@@ -361,10 +384,10 @@ save_font:
   ldy #>filename
   jsr setnam
   lda #<(start-1)
-  sta $fb
+  sta ptr1
   lda #>(start-1)
-  sta $fc
-  lda #$fb
+  sta ptr1+1
+  lda #ptr1
   ldx #<(new_start)
   ldy #>(new_start)
   jsr fsave
@@ -377,13 +400,13 @@ save_font:
   jsr restore_scanline_choices
   jmp init_screen
 
-++cmp #$93 ; CLR key
+++cmp #clearchar ; CLR key
   bne ++
 clear:  
   jsr save_undo  
   lda #0
   ldy #7
---sta ($22),y
+--sta (charptr),y
   dey
   bpl --
   jmp main
@@ -393,9 +416,9 @@ clear:
 rvs:  
   jsr save_undo  
   ldy #7
---lda ($22),y
-  eor #$ff
-  sta ($22),y
+--lda (charptr),y
+  eor #$FF
+  sta (charptr),y
   dey
   bpl --
   jmp main
@@ -405,9 +428,9 @@ rvs:
 shiftleft:  
   jsr save_undo  
   ldy #7
---lda ($22),y
+--lda (charptr),y
   asl
-  sta ($22),y
+  sta (charptr),y
   dey
   bpl --
   jmp main
@@ -417,9 +440,9 @@ shiftleft:
 shiftright:  
   jsr save_undo  
   ldy #7
---lda ($22),y
+--lda (charptr),y
   lsr
-  sta ($22),y
+  sta (charptr),y
   dey
   bpl --
   jmp main
@@ -430,14 +453,14 @@ shiftdown:
   jsr save_undo  
   ldy #7
 --dey
-  lda ($22),y
+  lda (charptr),y
   iny
-  sta ($22),y
+  sta (charptr),y
   dey
   bpl --
   iny
   lda #0
-  sta ($22),y
+  sta (charptr),y
   jmp main
 
 ++cmp #$5E ; '^' key
@@ -447,14 +470,14 @@ shiftup:
   ldx #7
   ldy #0
 --iny
-  lda ($22),y
+  lda (charptr),y
   dey
-  sta ($22),y
+  sta (charptr),y
   iny
   dex
   bne --
   lda #0
-  sta ($22),y
+  sta (charptr),y
   jmp main
 
 ++cmp #$46 ; 'F' key
@@ -462,22 +485,22 @@ shiftup:
 flip:  
   jsr save_undo  
   ldy #3
-  sty $ff
+  sty temp
   iny
-  sty $fe
---ldy $ff
-  lda ($22),y
+  sty ptr2+1
+--ldy temp
+  lda (charptr),y
   pha
-  ldy $fe
-  lda ($22),y
+  ldy ptr2+1
+  lda (charptr),y
   tax
   pla
-  sta ($22),y
-  ldy $ff
+  sta (charptr),y
+  ldy temp
   txa
-  sta ($22),y
-  inc $fe
-  dec $ff
+  sta (charptr),y
+  inc ptr2+1
+  dec temp
   bpl --
   jmp main
 
@@ -487,10 +510,10 @@ rotate:
   jsr save_undo  
   ldy #0
 ---ldx #0
---lda ($22),y
+--lda (charptr),y
   asl
-  sta ($22),y
-  ror $a9,x
+  sta (charptr),y
+  ror tempbuff,x
   inx
   cpx #8
   bne --
@@ -498,8 +521,8 @@ rotate:
   cpy #8
   bne ---
   ldy #7
---lda $a9,y
-  sta ($22),y
+--lda tempbuff,y
+  sta (charptr),y
   dey
   bpl --
   jmp main
@@ -510,19 +533,19 @@ mirror:
   jsr save_undo  
   ldy #7
 ---ldx #7
---lda ($22),y
+--lda (charptr),y
   lsr
-  sta ($22),y
-  lda $a9,y
+  sta (charptr),y
+  lda tempbuff,y
   rol
-  sta $a9,y
+  sta tempbuff,y
   dex
   bpl --
   dey
   bpl ---
   ldy #7
---lda $a9,y
-  sta ($22),y
+--lda tempbuff,y
+  sta (charptr),y
   dey
   bpl --
   jmp main
@@ -538,7 +561,7 @@ toggle_chars:
 + jsr choose_rom_ram_sets
   jmp -
 
-++cmp #$2a ; '*' key
+++cmp #starchar ; '*' key
   bne ++
 toggle_pixel_char:
   lda pixel_char
@@ -564,8 +587,8 @@ redo_undo:
   txa
   jsr set_undo_ptr
   ldy #7
---lda ($fb),y
-  sta ($22),y
+--lda (ptr1),y
+  sta (charptr),y
   dey
   bpl --
 + jmp main
@@ -574,7 +597,7 @@ redo_undo:
   bne ++
 copy:
   ldy #7
---lda ($22),y
+--lda (charptr),y
   sta clipboard,y
   dey
   bpl --
@@ -589,7 +612,7 @@ paste:
   jsr save_undo
   ldy #7
 --lda clipboard,y
-  sta ($22),y
+  sta (charptr),y
   dey
   bpl --
 + jmp main
@@ -599,10 +622,10 @@ paste:
 cut:
   jsr save_undo
   ldy #7
---lda ($22),y
+--lda (charptr),y
   sta clipboard,y
   lda #0
-  sta ($22),y
+  sta (charptr),y
   dey
   bpl --
   sty clipboard_present
@@ -624,25 +647,25 @@ toggle_case:
   jsr reset_undo
   lda #<(start-1)
   ldx #>(start-1)
-  sta $fb
-  stx $fc
+  sta ptr1
+  stx ptr1+1
   ldx #(>(start-1))+8
-  sta $fd
-  stx $fe
+  sta ptr2
+  stx ptr2+1
   ldx #8
-  stx $ff
+  stx temp
   ldy #0
---lda ($fb),y
+--lda (ptr1),y
   tax
-  lda ($fd),y
-  sta ($fb),y
+  lda (ptr2),y
+  sta (ptr1),y
   txa
-  sta ($fd),y
+  sta (ptr2),y
   iny
   bne --
-  inc $fc
-  inc $fe
-  dec $ff
+  inc ptr1+1
+  inc ptr2+1
+  dec temp
   bne --
   jsr set2copyfordisplay
   jmp main
@@ -712,10 +735,10 @@ hide:
 ++jmp -
 
 strout:
-  sta $fb
-  stx $fc
+  sta ptr1
+  stx ptr1+1
   ldy #$00
-- lda ($fb),y
+- lda (ptr1),y
   beq +
   jsr charout
   iny
@@ -727,73 +750,73 @@ linesout:
   lda #<lines_margin
   ldx #>lines_margin
   jsr strout
-  lda $b4
-  ldx $b5
+  lda lineptr
+  ldx lineptr+1
   jsr strout
   iny
   tya
   clc
-  adc $b4
-  sta $b4
+  adc lineptr
+  sta lineptr
   bcc +
-  inc $b5
+  inc lineptr+1
 + rts
 
 dispchar:
   lda #(columns+16)
-  sta $24
+  sta cursorptr
   lda #>video
-  sta $25
+  sta cursorptr+1
   lda #$08
-  sta $ff
+  sta temp
   ldy #$00
 --ldx #$08
-  lda ($22),y
-  sta $26
-- lda #$20 ; ' ' space
-  asl $26
+  lda (charptr),y
+  sta temp2
+- lda #spacechar
+  asl temp2
   bcc +
   lda pixel_char
-+ sta ($24),y
-  inc $24
++ sta (cursorptr),y
+  inc cursorptr
   bne +
-  inc $25
+  inc cursorptr+1
 + dex
   bne -
   clc
-  lda $24
+  lda cursorptr
   adc #(columns-9)
-  sta $24
+  sta cursorptr
   bcc +
-  inc $25
+  inc cursorptr+1
 + iny
-  dec $ff
+  dec temp
   bne --
   bit hide_mode
   bpl +
   jmp all_chars
 + jsr charptr_to_offset
   ldx #(15+10)
-  stx $24
+  stx cursorptr
   ldx #>video
-  stx $25
+  stx cursorptr+1
   sec
-  ror $ff
+  ror temp
   ldy #$00
   jsr disphex
-  inc $24
+  inc cursorptr
   bne +
-  inc $25
+  inc cursorptr+1
 + clc
-  ror $ff
+  ror temp
   ldx #$08
 - clc
-  lda $24
+  lda cursorptr
   adc #(columns-2)
-  sta $24
+  sta cursorptr
   bcc +
-  inc $25
-+ lda ($22),y
+  inc cursorptr+1
++ lda (charptr),y
   jsr disphex
   iny
   dex
@@ -807,9 +830,9 @@ disphex:
   lsr
   lsr
   jsr dispnybl
-  inc $24
+  inc cursorptr
   bne +
-  inc $25
+  inc cursorptr+1
 + pla
   and #$0f
   ; fall through
@@ -818,34 +841,34 @@ dispnybl:
   cmp #$3a
   bcc +    ; branch if less
   sbc #$39 ; subtract to get to 'A' to 'F' screen codes
-+ bit $ff
++ bit temp
   bpl +
   ora #$80 ; reverse text
-+ sta ($24),y
++ sta (cursorptr),y
   rts
 
 chkblink:
   sec
-  lda $a3
-  cmp $a2
+  lda jiffyblink
+  cmp jiffyclock
   bne +
-  lda $a2
+  lda jiffyclock
   adc #$1d
-  sta $a3
+  sta jiffyblink
   ldy #0
-  lda ($29),y
+  lda (pixelptr),y
   eor #$80
-  sta ($29),y
+  sta (pixelptr),y
 + rts
 
 blinkoff:
   ldy #0
   lda save_cursor
-  sta ($29),y
+  sta (pixelptr),y
   clc
-  lda $a2
+  lda jiffyclock
   adc #2
-  sta $a3
+  sta jiffyblink
   rts
 
 fill_color:
@@ -862,31 +885,31 @@ fill_color:
 all_chars:
   lda #<(video+(11*columns))
   ldx #>(video+(11*columns))
-  sta $fb
-  stx $fc
+  sta ptr1
+  stx ptr1+1
   bit hide_mode
   bpl +
   ldy #0
-  lda #$20
-- sta ($fb),y
+  lda #spacechar
+- sta (ptr1),y
   iny
   bne -
   jsr charptr_to_offset
   tay
-  sta ($fb),y
+  sta (ptr1),y
   rts
 + jsr disp_char_set
   bit hide_mode
   bmi +
   lda #<(video+(18*columns))
   ldx #>(video+(18*columns))
-  sta $fb
-  stx $fc
+  sta ptr1
+  stx ptr1+1
 ; continues
 disp_char_set:
   ldy #0
 - tya
-  sta ($fb),y
+  sta (ptr1),y
   iny
   bne -
 + rts
@@ -915,8 +938,8 @@ save_undo:
   txa
 + jsr set_undo_ptr
   ldy #7
-- lda ($22),y
-  sta ($fb),y
+- lda (charptr),y
+  sta (ptr1),y
   dey
   bpl -
   inc undo_count
@@ -931,11 +954,11 @@ set_undo_ptr:
   asl
   clc
   adc #<undo_buffer
-  sta $fb
+  sta ptr1
   ldx #>undo_buffer
   bcc +
   inx
-+ stx $fc
++ stx ptr1+1
   rts
 
 bank_norm
@@ -952,14 +975,14 @@ bank_charrom ; note caller responsible for disabling/enabling interrupts or equi
   rts
 
 charptr_to_offset:
-  lda $23
-  sta $ff
-  lda $22
-  lsr $ff
+  lda charptr+1
+  sta temp
+  lda charptr
+  lsr temp
   ror
-  lsr $ff
+  lsr temp
   ror
-  lsr $ff
+  lsr temp
   ror
   rts
 
@@ -968,21 +991,21 @@ set2copyfordisplay:
   ; (because $1000 RAM can't be displayed by VIC-II, shows ROM instead)
   lda #<(start-1+2048)
   ldx #>(start-1+2048)
-  sta $fb
-  stx $fc
+  sta ptr1
+  stx ptr1+1
   ldx #$38
-  sta $fd
-  stx $fe
+  sta ptr2
+  stx ptr2+1
   ldx #8
-  stx $ff
+  stx temp
   ldy #0
---lda ($fb),y
-  sta ($fd),y
+--lda (ptr1),y
+  sta (ptr2),y
   iny
   bne --
-  inc $fc
-  inc $fe
-  dec $ff
+  inc ptr1+1
+  inc ptr2+1
+  dec temp
   bne --
   rts
 
@@ -1130,7 +1153,7 @@ bitmask:
   !byte $80,$40,$20,$10,$08,$04,$02,$01
 
 invmask:
-  !byte $7f,$cf,$df,$ef,$f7,$fc,$fd,$fe
+ !byte $7f,$cf,$df,$ef,$f7,$fc,$fd,$fe
 
 title_header:
   !text 13
@@ -1175,8 +1198,9 @@ filename_end:
 press_key: !text 13, 13, 18, "PRESS ANY KEY", 13, 0
 
 ; screen code to display large pixel
-pixel_char: !byte 160
-pixel_char_alternate !byte 42
+;pixel_space: !byte 32
+pixel_char: !byte 160 ; reverse space screen code
+pixel_char_alternate !byte starchar
 
 hide_mode: !byte 0
 
