@@ -1182,9 +1182,12 @@ hide_mode: !byte 0
 
 scanline_set: !byte 0
 
-vicpage: !byte 16
+; values stored at $D018 based on scanline
+vicpage: !byte 16 ; upper 4 bits
 choose_charset_rom: !byte 16+4
 choose_charset1: !byte 16+2
 choose_charset2: !byte 16+14
+
+; safe storage while saving to counter visual issues with interrupts being disabled during saves
 save_choose_charset1: !byte 0
 save_choose_charset2: !byte 0
