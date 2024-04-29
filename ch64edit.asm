@@ -600,7 +600,7 @@ toggle_pixel_char:
   sty pixel_space_alternate
   sta pixel_space_alternate2
   jsr set_inverse_cursor
-  jsr redraw_header
+  jsr redraw_footer
   jmp main
 
 ++cmp #$5A ; 'Z' key
@@ -1267,9 +1267,9 @@ restore_cursor_color:
   sta (pixelcolorptr),y
   rts
 
-redraw_header:
-  lda #<pre_repeat_header
-  ldx #>pre_repeat_header
+redraw_footer:
+  lda #<pre_repeat_footer
+  ldx #>pre_repeat_footer
   jsr strout
   jsr draw_header
   lda #$92
@@ -1280,8 +1280,8 @@ draw_header:
   ldx #>header
   bit inverse_cursor
   bmi +
-  lda #<other_header
-  ldx #>other_header
+  lda #<grid_footer
+  ldx #>grid_footer
 + jmp strout
 
 bitmask:
@@ -1303,12 +1303,12 @@ header:
   !byte $12,$20,$37,$36,$35,$34,$33,$32,$31,$30,$20
   !byte 0
 
-other_header:
+grid_footer:
   !byte $20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20
   !byte $12,$20,$A3,$A3,$A3,$A3,$A3,$A3,$A3,$A3,$20
   !byte 0
 
-pre_repeat_header:
+pre_repeat_footer:
   !byte $13,$92,$11,$11,$11,$11,$11,$11,$11,$11,$11,0
 
 lines:
