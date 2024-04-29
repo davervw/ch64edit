@@ -40,6 +40,7 @@ ptr2 = $fd
 temp = $ff
 
 clearchar = $93
+homechar = $13
 spacechar = $20
 starchar = $2a ; asterisk
 
@@ -110,7 +111,9 @@ begin:
 init_screen:
   lda #clearchar
   jsr charout
-
+init_screen_no_clear:
+  lda #homechar
+  jsr charout
   bit hide_mode
   bmi ++
   lda #<title_header
@@ -340,7 +343,7 @@ left:
   sta pixelx
 + jmp main_save
 
-++cmp #$13 ; HOME key
+++cmp #homechar ; HOME key
   bne ++
 home:  
   lda #0
@@ -787,6 +790,15 @@ hide:
   eor #$80
   sta hide_mode
   jmp init_screen
+
+++cmp #$30 ; "0" key
+  bcc ++
+  cmp #$3A ; greater than "9" key
+  bcs ++
+theme_number:
+  and #$0f
+  jsr set_theme
+  jmp init_screen_no_clear
 
 ++jmp -
 
@@ -1284,6 +1296,89 @@ draw_header:
   ldx #>grid_footer
 + jmp strout
 
+set_theme:
+  cmp #0
+  bne +
+  lda #10
++ cmp #11
+  bcc +
+  rts
++ tay
+  lda #<themes
+  ldx #>themes
+  sta ptr1
+  stx ptr1+1
+- dey
+  beq +
+  clc
+  lda ptr1
+  adc #9
+  sta ptr1
+  lda ptr1+1
+  adc #0
+  sta ptr1+1
+  bne -
++ ldy #0
+  lda (ptr1),y
+  sta foreground
+  iny
+  lda (ptr1),y
+  sta background
+  iny
+  lda (ptr1),y
+  sta border
+  iny
+  lda (ptr1),y
+  sta pixel_space_color
+  iny
+  lda (ptr1),y
+  sta pixel_char_color
+  iny
+  lda (ptr1),y
+  sta pixel_cursor_color
+  iny
+  lda (ptr1),y
+  sta pixel_space
+  iny
+  lda (ptr1),y
+  sta pixel_char
+  iny
+  lda (ptr1),y
+  sta border_char
+  jsr set_inverse_cursor
+  jsr fill_color
+  ; fixup alternates after loading theme
+  lda pixel_char
+  cmp #160
+  bne +
+  lda #spacechar
+  sta pixel_space_alternate
+  lda #starchar
+  sta pixel_char_alternate
+  lda #207
+  sta pixel_space_alternate2
+  sta pixel_char_alternate2
+  rts
++ cmp #starchar
+  bne +
+  lda #207
+  sta pixel_space_alternate
+  sta pixel_char_alternate
+  lda #spacechar
+  sta pixel_space_alternate2
+  lda #160
+  sta pixel_char_alternate2
+  rts
++ lda #spacechar
+  sta pixel_space_alternate
+  lda #160
+  sta pixel_char_alternate
+  lda #spacechar
+  sta pixel_space_alternate2
+  lda #starchar
+  sta pixel_char_alternate2
+  rts
+
 bitmask:
   !byte $80,$40,$20,$10,$08,$04,$02,$01
 
@@ -1341,20 +1436,34 @@ filename_end:
 
 press_key: !text 13, 13, 18, "PRESS ANY KEY", 13, 0
 
-; screen code to display large pixel
-pixel_space: !byte 32
-pixel_space_alternate !byte 32
-pixel_space_alternate2 !byte 207
-pixel_char: !byte 160 ; reverse space screen code
-pixel_char_alternate !byte starchar
-pixel_char_alternate2 !byte 207
-border_char !byte 160
+themes:
+  !byte 14, 6, 14, 14, 0, 1, 32, 160, 160 ; standard colors, black pixels in editor, white pixel cursor, solid pixels
+  !byte 1, 0, 15, 0, 1, 11, 207, 207, 160 ; high contrast black on white, some gray, grid pixels
+  !byte 5, 0, 0, 0, 5, 5, 32, 42, 160 ; high contrast simple green on black, asterisks
+  !byte 6, 1, 3, 15, 0, 3, 207, 207, 160 ; Vic-20 inspired, grid
+  !byte 0, 11, 12, 15, 0, 14, 207, 207, 160 ; darker, lower contrast grays, grid
+  !byte 13, 6, 8, 7, 2, 4, 207, 207, 160 ; bright primary colors, grid
+  !byte 11, 0, 8, 15, 8, 9, 32, 160, 160 ; dark pumpkin solid
+  !byte 13, 11, 13, 12, 0, 4, 32, 160, 160 ; C128 inspired, solid
+  !byte 0, 1, 14, 15, 14, 5, 207, 207, 160 ; Plus/4 inspired, grid
+  !byte 14, 0, 0, 0, 11, 6, 32, 160, 160 ; dark mode, solid
 
 pixel_space_color !byte 14
 pixel_char_color !byte 0
 pixel_cursor_color !byte 1
-inverse_cursor !byte 0x80
 
+; screen code to display large pixel
+pixel_space: !byte 32
+pixel_char: !byte 160 ; reverse space screen code
+border_char !byte 160
+
+pixel_space_alternate !byte 32
+pixel_char_alternate !byte starchar
+
+pixel_space_alternate2 !byte 207
+pixel_char_alternate2 !byte 207
+
+inverse_cursor !byte 0x80
 hide_mode: !byte 0
 
 scanline_set: !byte 0
