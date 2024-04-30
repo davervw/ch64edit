@@ -726,10 +726,14 @@ inc_foreground:
 ++cmp #$89 ; F2 key
   bne ++
 inc_cursor:
-  inc pixel_cursor_color
-  lda background
+  clc
+  lda pixel_cursor_color
+  adc #1
   and #15
+  sta pixel_cursor_color
+  lda background
   eor pixel_cursor_color
+  and #15
   beq inc_cursor
   jsr dispchar
   jmp -
@@ -769,10 +773,14 @@ dec_border:
 ++cmp #$88 ; F7 key
   bne ++
 inc_pixel:
-  inc pixel_char_color
-  lda background
+  clc
+  lda pixel_char_color
+  adc #1
   and #15
+  sta pixel_char_color
+  lda background
   eor pixel_char_color
+  and #15
   beq inc_pixel
   jsr dispchar
   jmp -
@@ -780,11 +788,11 @@ inc_pixel:
 ++cmp #$8c ; F8 key
   bne ++
 inc_space:
-  inc pixel_space_color
+  clc
   lda pixel_space_color
-  eor background
+  adc #1
   and #15
-  beq inc_space
+  sta pixel_space_color
   jsr dispchar
   jmp -
 
