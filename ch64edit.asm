@@ -11,6 +11,7 @@ getkey = $ffe4
 setlfs = $ffba
 setnam = $ffbd
 fsave = $ffd8
+fload = $ffd5
 
 undo_buffer = $33c
 undo_limit = 24 ; must save extra one space for redo (uses 25)
@@ -46,13 +47,13 @@ starchar = $2a ; asterisk
 
 *=$0801 ; C64 start
 start:
-!byte $0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 ; 10 SYS6157 (without leading zero)
+!byte $0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 ; 10 SYS6157 (without leading zero byte because starts at offset 0)
 
 ; 0800-17ff is reserved for editable character images, will be initialized from charrom $D000 for one-time initialization
 
 *=$1800
 new_start:
-!byte $00,$0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 ; 10 SYS6157 (with leading zero)
+!byte $00,$0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 ; 10 SYS6157 (with leading zero byte because starts at offset 1)
 begin:
   ; everytime init values
   jsr reset_undo
@@ -72,16 +73,18 @@ begin:
   sta vicpage
   ora #4
   sta choose_charset_rom
-  jsr choose_rom_ram_sets
-
+  jsr check_load_config ; do before switching to RAM set
   jsr init_irq_scanline
 
   lda basicstartptr+1
   cmp #>new_start
   beq init_screen ; skip one-time init
-  lda #>new_start
-  sta basicstartptr+1 ; reset basic start
-  ; TODO: make sure basicstartptr set to 1
+
+; one-time init begins
+  lda #<(new_start+1)
+  ldx #>(new_start+1)
+  sta basicstartptr
+  stx basicstartptr+1 ; reset basic start
 
 ; copy charrom to ram
   lda #0
@@ -372,6 +375,8 @@ toggle_bit:
 ++cmp #$03 ; stop key
   bne ++
 bye:  
+  jsr check_save_config
+
   lda choose_charset1
   sta $D018 ; turn on programmable characters
   
@@ -1347,7 +1352,9 @@ set_theme:
   sta border_char
   jsr set_inverse_cursor
   jsr fill_color
-  ; fixup alternates after loading theme
+  jmp fixup_alternates
+
+fixup_alternates:
   lda pixel_char
   cmp #160
   bne +
@@ -1378,6 +1385,129 @@ set_theme:
   lda #starchar
   sta pixel_char_alternate2
   rts
+
+check_load_config:
+  lda #<ask_load_config
+  ldx #>ask_load_config
+  jsr strout
+  jsr getyesno
+  bne +
+  ; setup and save
+  lda #10
+  sta $39
+  lda #0
+  sta $3a
+  lda #$c0 ; KERNAL control and error messages
+  sta $9d ; set messages to be displayed
+  lda #1
+  ldx #8
+  ldy #0
+  jsr setlfs
+  lda #(config_filename_end - load_config_filename)
+  ldx #<load_config_filename
+  ldy #>load_config_filename
+  jsr setnam
+  lda #0
+  ldx #<file_config
+  ldy #>file_config
+  jsr fload
+  ; install configuration options
+  ldx #(active_config_end - active_config)
+  ldy #0
+- lda file_config, y
+  sta active_config, y
+  iny
+  dex
+  bne -
+  lda save_foreground
+  ldx save_background
+  ldy save_border
+  sta foreground
+  stx background
+  sty border
+  jsr set_inverse_cursor
+  jsr fixup_alternates
++ rts
+
+check_save_config:
+  lda foreground
+  and #15
+  sta save_foreground
+  lda background
+  and #15
+  sta save_background
+  lda border
+  and #15
+  sta save_border
+  jsr compare_config
+  beq +
+  jsr save_scanline_choices
+  lda #<config_changed
+  ldx #>config_changed
+  jsr strout
+  jsr getyesno
+  bne +
+  ; setup and save
+  lda #10
+  sta $39
+  lda #0
+  sta $3a
+  lda #$c0 ; KERNAL control and error messages
+  sta $9d ; set messages to be displayed
+  lda #1
+  ldx #8
+  ldy #15
+  jsr setlfs
+  lda #(config_filename_end - save_config_filename)
+  ldx #<save_config_filename
+  ldy #>save_config_filename
+  jsr setnam
+  lda #<active_config
+  sta ptr1
+  lda #>active_config
+  sta ptr1+1
+  lda #ptr1
+  ldx #<active_config_end
+  ldy #>active_config_end
+  jsr fsave
+  ; prompt
+  lda #<press_key
+  ldx #>press_key
+  jsr strout
+--jsr getkey
+  beq --
+  jsr restore_scanline_choices
++ rts
+
+compare_config:
+  ldx #(active_config_end - active_config)
+  ldy #0
+- lda file_config, y
+  cmp active_config, y
+  bne +
+  iny
+  dex
+  bne -
++ rts
+
+getyesno:
+- jsr getkey
+  beq -
++ cmp #78 ; key "N"
+  bne +
+  lda #<no
+  ldx #>no
+  jsr strout
+  lda #1
+  bne ++
++ cmp #89 ; key "Y"
+  beq +++
+  cmp #13
+  bne -
++++lda #<yes
+  ldx #>yes
+  jsr strout
+++rts
 
 bitmask:
   !byte $80,$40,$20,$10,$08,$04,$02,$01
@@ -1434,7 +1564,18 @@ filename:
   !text "@0:FONT.BIN"
 filename_end:
 
+save_config_filename:
+  !text "@0:"
+load_config_filename
+  !text "FONT.CFG"
+config_filename_end:
+
 press_key: !text 13, 13, 18, "PRESS ANY KEY", 13, 0
+
+ask_load_config: !text 147, 13, "LOAD CONFIGURATION (Y/N)? ", 18, "Y", 146, 157, 0 
+config_changed: !text 147, 13, "SAVE CONFIGURATION (Y/N)? ", 18, "Y", 146, 157, 0
+yes: !text "YES", 13, 0
+no: !text "NO", 13, 0
 
 themes:
   !byte 14, 6, 14, 14, 0, 1, 32, 160, 160 ; standard colors, black pixels in editor, white pixel cursor, solid pixels
@@ -1448,6 +1589,12 @@ themes:
   !byte 0, 1, 14, 15, 14, 5, 207, 207, 160 ; Plus/4 inspired, grid
   !byte 14, 0, 0, 0, 11, 6, 32, 160, 160 ; dark mode, solid
 
+;******************************
+active_config:
+save_foreground !byte 0
+save_background !byte 0
+save_border !byte 0
+
 pixel_space_color !byte 14
 pixel_char_color !byte 0
 pixel_cursor_color !byte 1
@@ -1456,6 +1603,8 @@ pixel_cursor_color !byte 1
 pixel_space: !byte 32
 pixel_char: !byte 160 ; reverse space screen code
 border_char !byte 160
+active_config_end:
+;******************************
 
 pixel_space_alternate !byte 32
 pixel_char_alternate !byte starchar
@@ -1477,3 +1626,5 @@ choose_charset2: !byte 16+14
 ; safe storage while saving to counter visual issues with interrupts being disabled during saves
 save_choose_charset1: !byte 0
 save_choose_charset2: !byte 0
+
+file_config: ; must be at end of program, available space
