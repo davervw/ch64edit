@@ -1,4 +1,10 @@
-; ch64edit.asm
+; ch64edit.asm - Character Sets Editor for Commodore 64
+; 
+; Copyright (c) 2024 by David R. Van Wagner
+; MIT LICENSE
+; github.com/davervw/ch64edit
+; davevw.com
+;
 
 video = $0400
 color_ram = $D800
