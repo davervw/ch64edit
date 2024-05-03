@@ -756,12 +756,17 @@ inc_background:
 
 ++cmp #$8a ; F4 key
   bne ++
-dec_background:
-  dec background
-  lda background
-  eor foreground
+inc_charset1_color
+  clc
+  lda charset1_color
+  adc #1
   and #15
-  beq dec_background
+  sta charset1_color
+  eor background
+  and #15
+  beq inc_charset1_color
+  jsr fill_color
+  jsr dispchar
   jmp -
 
 ++cmp #$87 ; F5 key
@@ -772,9 +777,18 @@ inc_border:
 
 ++cmp #$8b ; F6 key
   bne ++
-dec_border:  
-  dec border
-  jmp ++
+inc_charset2_color
+  clc
+  lda charset2_color
+  adc #1
+  and #15
+  sta charset2_color
+  eor background
+  and #15
+  beq inc_charset2_color
+  jsr fill_color
+  jsr dispchar
+  jmp -
 
 ++cmp #$88 ; F7 key
   bne ++
@@ -999,12 +1013,27 @@ blinkoff:
   rts
 
 fill_color:
-  ldy #$00
+  ; titles, menus, and grid
+  ldy #0
   lda foreground
 - sta color_ram,y
-  sta color_ram+$100,y
-  sta color_ram+$200,y
-  sta color_ram+$300,y
+  iny
+  bne -
+  ; continued titles, menus, and grid
+  ldx #(11*40-256)
+- sta color_ram+$100,y
+  iny
+  dex
+  bne -
+  ; charset 1
+  ldy #0
+  lda charset1_color
+- sta color_ram+(11*40),y
+  iny
+  bne -
+  ; charset 2
+  lda charset2_color
+- sta color_ram+(18*40),y
   iny
   bne -
   rts
@@ -1331,7 +1360,7 @@ set_theme:
   beq +
   clc
   lda ptr1
-  adc #9
+  adc #(active_config_end - active_config)
   sta ptr1
   lda ptr1+1
   adc #0
@@ -1364,6 +1393,12 @@ set_theme:
   iny
   lda (ptr1),y
   sta border_char
+  iny
+  lda (ptr1),y
+  sta charset1_color
+  iny
+  lda (ptr1),y
+  sta charset2_color
   jsr set_inverse_cursor
   jsr fill_color
   jmp fixup_alternates
@@ -1405,8 +1440,10 @@ check_load_config:
   ldx #>ask_load_config
   jsr strout
   jsr getyesno
-  bne +
+  bne ++
   ; setup and save
+  lda #$ff
+  sta file_config+9 ; to help detect version 1 configuration
   lda #10
   sta $39
   lda #0
@@ -1425,8 +1462,15 @@ check_load_config:
   ldx #<file_config
   ldy #>file_config
   jsr fload
+  ; check version 1 configuration (no colors for charset1/charset2)
+  lda file_config+9
+  cmp #$ff
+  bne +
+  lda file_config ; foreground color
+  sta file_config+9 ; charset1 color
+  sta file_config+10 ; charset2 color
   ; install configuration options
-  ldx #(active_config_end - active_config)
++ ldx #(active_config_end - active_config)
   ldy #0
 - lda file_config, y
   sta active_config, y
@@ -1441,7 +1485,7 @@ check_load_config:
   sty border
   jsr set_inverse_cursor
   jsr fixup_alternates
-+ rts
+++rts
 
 check_save_config:
   lda foreground
@@ -1592,16 +1636,16 @@ yes: !text "YES", 13, 0
 no: !text "NO", 13, 0
 
 themes:
-  !byte 14, 6, 14, 14, 0, 1, 32, 160, 160 ; standard colors, black pixels in editor, white pixel cursor, solid pixels
-  !byte 1, 0, 15, 0, 1, 11, 207, 207, 160 ; high contrast black on white, some gray, grid pixels
-  !byte 5, 0, 0, 0, 5, 5, 32, 42, 160 ; high contrast simple green on black, asterisks
-  !byte 6, 1, 3, 15, 0, 3, 207, 207, 160 ; Vic-20 inspired, grid
-  !byte 0, 11, 12, 15, 0, 14, 207, 207, 160 ; darker, lower contrast grays, grid
-  !byte 13, 6, 8, 7, 2, 4, 207, 207, 160 ; bright primary colors, grid
-  !byte 11, 0, 8, 15, 8, 9, 32, 160, 160 ; dark pumpkin solid
-  !byte 13, 11, 13, 12, 0, 4, 32, 160, 160 ; C128 inspired, solid
-  !byte 0, 1, 14, 15, 14, 5, 207, 207, 160 ; Plus/4 inspired, grid
-  !byte 14, 0, 0, 0, 11, 6, 32, 160, 160 ; dark mode, solid
+  !byte 14, 6, 14, 14, 0, 1, 32, 160, 160, 14, 14 ; standard colors, black pixels in editor, white pixel cursor, solid pixels
+  !byte 1, 0, 15, 0, 1, 11, 207, 207, 160, 1, 1 ; high contrast black on white, some gray, grid pixels
+  !byte 5, 0, 0, 0, 5, 5, 32, 42, 160, 5, 5 ; high contrast simple green on black, asterisks
+  !byte 6, 1, 3, 15, 0, 3, 207, 207, 160, 6, 6 ; Vic-20 inspired, grid
+  !byte 0, 11, 12, 15, 0, 14, 207, 207, 160, 0, 0 ; darker, lower contrast grays, grid
+  !byte 13, 6, 8, 7, 2, 4, 207, 207, 160, 13, 13 ; bright primary colors, grid
+  !byte 11, 0, 8, 15, 8, 9, 32, 160, 160, 11, 11 ; dark pumpkin solid
+  !byte 13, 11, 13, 12, 0, 4, 32, 160, 160, 13, 13 ; C128 inspired, solid
+  !byte 0, 1, 14, 15, 14, 5, 207, 207, 160, 0, 0 ; Plus/4 inspired, grid
+  !byte 14, 0, 0, 0, 11, 6, 32, 160, 160, 14, 14 ; dark mode, solid
 
 ;******************************
 active_config:
@@ -1617,8 +1661,12 @@ pixel_cursor_color !byte 1
 pixel_space: !byte 32
 pixel_char: !byte 160 ; reverse space screen code
 border_char !byte 160
-active_config_end:
-;******************************
+
+charset1_color !byte 14
+charset2_color !byte 14
+
+active_config_end: !byte 0 ; unused byte
+;***************
 
 pixel_space_alternate !byte 32
 pixel_char_alternate !byte starchar
