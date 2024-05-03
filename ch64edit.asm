@@ -726,7 +726,6 @@ inc_foreground:
   and #15
   beq inc_foreground
   jsr fill_color
-  jsr dispchar
   jmp -
 
 ++cmp #$89 ; F2 key
@@ -766,7 +765,6 @@ inc_charset1_color
   and #15
   beq inc_charset1_color
   jsr fill_color
-  jsr dispchar
   jmp -
 
 ++cmp #$87 ; F5 key
@@ -787,7 +785,6 @@ inc_charset2_color
   and #15
   beq inc_charset2_color
   jsr fill_color
-  jsr dispchar
   jmp -
 
 ++cmp #$88 ; F7 key
@@ -878,12 +875,12 @@ dispchar:
   lda (charptr),y
   sta temp2
 - lda pixel_space_color
-  sta (colorptr),y
-  lda pixel_space
   asl temp2
   bcc +
   lda pixel_char_color
-  sta (colorptr),y
++ sta (colorptr),y
+  lda pixel_space
+  bcc +
   lda pixel_char
 + sta (dispptr),y
   inc dispptr
@@ -1013,15 +1010,35 @@ blinkoff:
   rts
 
 fill_color:
-  ; titles, menus, and grid
-  ldy #0
+  ; top line visible grid border and character index
+  ; and bottom grid border
+  ldx #12
   lda foreground
-- sta color_ram,y
-  iny
+- sta color_ram+14,x
+  sta color_ram+14+(9*40),x ; 9 lines down
+  dex
   bne -
-  ; continued titles, menus, and grid
-  ldx #(11*40-256)
-- sta color_ram+$100,y
+  ; titles, copyright, menus, and grid side borders
+  ldx #16
+  ldy #0
+- sta color_ram+1*40,y
+  sta color_ram+2*40,y
+  sta color_ram+3*40,y
+  sta color_ram+4*40,y
+  sta color_ram+5*40,y
+  sta color_ram+6*40,y
+  sta color_ram+7*40,y
+  sta color_ram+8*40,y
+  sta color_ram+9*40,y
+  sta color_ram+24+(1*40),y
+  sta color_ram+24+(2*40),y
+  sta color_ram+24+(3*40),y
+  sta color_ram+24+(4*40),y
+  sta color_ram+24+(5*40),y
+  sta color_ram+24+(6*40),y
+  sta color_ram+24+(7*40),y
+  sta color_ram+24+(8*40),y
+  sta color_ram+24+(9*40),y
   iny
   dex
   bne -
