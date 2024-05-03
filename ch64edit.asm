@@ -115,9 +115,9 @@ begin:
   bne -
   jsr bank_norm
   cli
-  jsr set2copyfordisplay
 
 init_screen:
+  jsr set2copyfordisplay
   lda #clearchar
   jsr charout
 init_screen_no_clear:
