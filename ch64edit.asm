@@ -396,7 +396,17 @@ bye:
   jsr fill_color
   jsr all_chars
 
-  rts
+  ; adjust next token ptr to $180a if was $080a
+  lda $7a
+  cmp #<(start+9)
+  bne +
+  lda $7b
+  cmp #>start
+  bne +
+  lda #>new_start
+  sta $7b
+
++ rts
 
 ++cmp #$53 ; 'S' key
   bne ++
