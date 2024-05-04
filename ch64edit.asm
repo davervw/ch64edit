@@ -53,13 +53,13 @@ starchar = $2a ; asterisk
 
 *=$0801 ; C64 start
 start:
-!byte $0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 ; 10 SYS6157 (without leading zero byte because starts at offset 0)
+!byte $0b,$18,$0a,$00,$9e,$31,$32,$33,$30,$32,$00,$00,$00  ; 10 SYS12302 (without leading zero byte because starts at offset 0)
 
 ; 0800-17ff is reserved for editable character images, will be initialized from charrom $D000 for one-time initialization
 
-*=$1800
+*=$3000
 new_start:
-!byte $00,$0b,$18,$0a,$00,$9e,$36,$31,$35,$37,$00,$00,$00 ; 10 SYS6157 (with leading zero byte because starts at offset 1)
+!byte $00,$0b,$18,$0a,$00,$9e,$31,$32,$33,$30,$32,$00,$00,$00 ; 10 SYS12302 (with leading zero byte because starts at offset 1)
 begin:
   ; everytime init values
   jsr reset_undo
@@ -424,7 +424,7 @@ bye:
 
   ; adjust next token ptr to $180a if was $080a
   lda $7a
-  cmp #<(start+9)
+  cmp #<(start+10)
   bne +
   lda $7b
   cmp #>start
@@ -1232,13 +1232,13 @@ charptr_to_offset:
   rts
 
 set2copyfordisplay:
-  ; also copy second set to $3800 for VIC-II raster interrupt display
+  ; also copy second set to $2800 for VIC-II raster interrupt display
   ; (because $1000 RAM can't be displayed by VIC-II, shows ROM instead)
   lda #<(start-1+2048)
   ldx #>(start-1+2048)
   sta ptr1
   stx ptr1+1
-  ldx #$38
+  ldx #$28
   sta ptr2
   stx ptr2+1
   ldx #8
@@ -1379,7 +1379,7 @@ choose_rom_ram_sets:
   ora #$02
   sta choose_charset1
   and #$F0
-  ora #14
+  ora #10
   sta choose_charset2
   rts
 
