@@ -381,6 +381,11 @@ toggle_bit:
 ++cmp #$03 ; stop key
   bne ++
 bye:
+  ; avoid BREAK message by waiting for stop key to be released
+  lda $91 ; stop key pressed?
+  cmp #$7f ; stop
+  beq bye ; pause while stop pressed
+
   jsr choose_rom_only_sets
   jsr stop_irq_scanline
 
