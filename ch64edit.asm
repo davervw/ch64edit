@@ -31,7 +31,7 @@ save_cursor = $a7
 tempbuff = $a8 ; 8 bytes free to use temporarily a8-af
 colorptr = $b0
 pixelcolorptr = $b2 ; pointer to pixel cursor in color ram
-lineptr = $b4 ; used with linesout
+lineptr = $b4 ; used with menulinesout
 border = 53280
 background = 53281
 foreground = 646
@@ -78,10 +78,13 @@ begin:
   sta vicpage
   ora #4
   sta choose_charset_rom
+  
+  ; everytime option to load config
   jsr check_load_config ; do before switching to RAM set
   jsr choose_rom_ram_sets
   jsr init_irq_scanline
 
+  ; check if can skip one-time init
   lda basicstartptr+1
   cmp #>new_start
   beq init_screen ; skip one-time init
@@ -121,22 +124,28 @@ init_screen:
   lda #clearchar
   jsr charout
 init_screen_no_clear:
+  jsr fill_color ; fill color ram so we can poke characters to video ram to be seen
   lda #homechar
   jsr charout
   bit hide_mode
   bmi ++
-  lda #<title_header
-  ldx #>title_header
+  lda foreground
+  pha
+  lda title_color
+  sta foreground
+  lda #<title
+  ldx #>title
   jsr strout
-  lda #<lines
-  ldx #>lines
+  pla
+  sta foreground
+  lda #<header
+  ldx #>header
+  jsr strout
+  lda #<menus
+  ldx #>menus
   sta lineptr
   stx lineptr+1
-  jsr linesout
-
-  ; fill color ram so we can poke characters to video ram to be seen
-  jsr fill_color
-
+  jsr menulinesout
   lda #$30 ; zero character
   sta ptr2  ; init first digit
   lda #$08
@@ -151,12 +160,12 @@ init_screen_no_clear:
   jsr strout
   lda #spacechar
   jsr charout
-  jsr linesout
+  jsr menulinesout
   inc ptr2  ; ++digit
   dec temp  ; --count
   bne -
   jsr draw_header
-  jsr linesout
+  jsr menulinesout
 ++jsr all_chars
 
   lda #0
@@ -840,6 +849,28 @@ inc_space:
   jsr dispchar
   jmp -
 
+++cmp #$2C ; "," key
+  bne ++
+inc_title_color:
+  clc
+  lda title_color
+  adc #1
+  and #15
+  sta title_color
+  jsr fill_color
+  jmp -
+
+++cmp #$2E ; "." key
+  bne ++
+inc_menu_color:
+  clc
+  lda menu_color
+  adc #1
+  and #15
+  sta menu_color
+  jsr fill_color
+  jmp -
+
 ++cmp #$48 ; "H" key
   bne ++
 hide:
@@ -871,13 +902,19 @@ strout:
 + rts
 
 ; output multiple buffers in a row in subsequent calls, kept track of by b4/b5
-linesout:
+menulinesout:
   lda #<lines_margin
   ldx #>lines_margin
   jsr strout
+  lda foreground
+  pha
+  lda menu_color
+  sta foreground
   lda lineptr
   ldx lineptr+1
   jsr strout
+  pla
+  sta foreground
   iny
   tya
   clc
@@ -1048,7 +1085,11 @@ fill_color:
   ; titles, copyright, menus, and grid side borders
   ldx #16
   ldy #0
-- sta color_ram+1*40,y
+- lda title_color
+  cpy #15
+  bcc +
+  lda foreground
++ sta color_ram+1*40,y
   sta color_ram+2*40,y
   sta color_ram+3*40,y
   sta color_ram+4*40,y
@@ -1057,7 +1098,11 @@ fill_color:
   sta color_ram+7*40,y
   sta color_ram+8*40,y
   sta color_ram+9*40,y
-  sta color_ram+24+(1*40),y
+  lda foreground
+  cpy #3
+  bcc +
+  lda menu_color
++ sta color_ram+24+(1*40),y
   sta color_ram+24+(2*40),y
   sta color_ram+24+(3*40),y
   sta color_ram+24+(4*40),y
@@ -1457,6 +1502,12 @@ set_theme:
   iny
   lda (ptr1),y
   sta charset2_color
+  iny
+  lda (ptr1),y
+  sta title_color
+  iny
+  lda (ptr1),y
+  sta menu_color
   jsr set_inverse_cursor
   jsr fill_color
   jmp fixup_alternates
@@ -1501,7 +1552,8 @@ check_load_config:
   bne ++
   ; setup and save
   lda #$ff
-  sta file_config+9 ; to help detect version 1 configuration
+  sta file_config+9 ; to help detect version <2 configuration (no charset colors)
+  sta file_config+11 ; to help detect version <3 configuration (no title/menu colors)
   lda #10
   sta $39
   lda #0
@@ -1527,6 +1579,12 @@ check_load_config:
   lda file_config ; foreground color
   sta file_config+9 ; charset1 color
   sta file_config+10 ; charset2 color
++ lda file_config+11
+  cmp #$ff
+  bne +
+  lda file_config ; foreground color
+  sta file_config+11 ; titles color
+  sta file_config+12 ; menus color
   ; install configuration options
 + ldx #(active_config_end - active_config)
   ldy #0
@@ -1631,7 +1689,7 @@ bitmask:
 invmask:
   !byte $7f,$cf,$df,$ef,$f7,$fc,$fd,$fe
 
-title_header:
+title:
   !text 13
   !text " ",18,"  CH64EDIT  ",13
   !text " ",18,"  (C) 2024  ",13
@@ -1639,6 +1697,8 @@ title_header:
   !text " ",18," VAN WAGNER ",13
   !text " ",18," DAVEVW.COM ",13
   !text $13
+  !byte 0
+
 header:  
   !byte $20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20,$20
   !byte $12,$20,$37,$36,$35,$34,$33,$32,$31,$30,$20
@@ -1652,13 +1712,13 @@ grid_footer:
 pre_repeat_footer:
   !byte $13,$92,$11,$11,$11,$11,$11,$11,$11,$11,$11,0
 
-lines:
+menus:
   !text 13,0
   !text 18,"@-+*/YZXCV",13,0
   !text 18,"B",146,"ACK ",18,"R",146,"OTATE",13,0
   !text 18,"N",146,"EXT ",18,"M",146,"IRROR",13,0
   !text 18,"<>^V",146," ",18,"F",146,"LIP",13,0
-  !text 18,"F1",146,"-",18,"F8",146," ",18,"0-9",13,0
+  !text 18,"F1",146,"-",18,"F8",146," ",18,",.",146," ",18,"0-9",146,0
   !text 18,"HOME",146," ",18,"CLR",13,0
   !text 18,"RVS",146,"  ",18,"SPACE",13,0
   !text 18,"STOP",146," ",18,"S",146,"AVE",13,0
@@ -1694,16 +1754,16 @@ yes: !text "YES", 13, 0
 no: !text "NO", 13, 0
 
 themes:
-  !byte 14, 6, 14, 14, 0, 1, 32, 160, 160, 14, 14 ; standard colors, black pixels in editor, white pixel cursor, solid pixels
-  !byte 1, 0, 15, 0, 1, 11, 207, 207, 160, 1, 1 ; high contrast black on white, some gray, grid pixels
-  !byte 5, 0, 0, 0, 5, 5, 32, 42, 160, 5, 5 ; high contrast simple green on black, asterisks
-  !byte 6, 1, 3, 15, 0, 3, 207, 207, 160, 6, 6 ; Vic-20 inspired, grid
-  !byte 0, 11, 12, 15, 0, 14, 207, 207, 160, 0, 0 ; darker, lower contrast grays, grid
-  !byte 13, 6, 8, 7, 2, 4, 207, 207, 160, 13, 13 ; bright primary colors, grid
-  !byte 11, 0, 8, 15, 8, 9, 32, 160, 160, 11, 11 ; dark pumpkin solid
-  !byte 13, 11, 13, 12, 0, 4, 32, 160, 160, 13, 13 ; C128 inspired, solid
-  !byte 0, 1, 14, 15, 14, 5, 207, 207, 160, 0, 0 ; Plus/4 inspired, grid
-  !byte 14, 0, 0, 0, 11, 6, 32, 160, 160, 14, 14 ; dark mode, solid
+  !byte 14, 6, 14, 14, 0, 1, 32, 160, 160, 14, 14, 14, 14 ; standard colors, black pixels in editor, white pixel cursor, solid pixels
+  !byte 1, 0, 15, 0, 1, 11, 207, 207, 160, 1, 1, 1, 1 ; high contrast black on white, some gray, grid pixels
+  !byte 5, 0, 0, 0, 5, 5, 32, 42, 160, 5, 5, 5, 5 ; high contrast simple green on black, asterisks
+  !byte 6, 1, 3, 15, 0, 3, 207, 207, 160, 6, 6, 6, 6 ; Vic-20 inspired, grid
+  !byte 0, 11, 12, 15, 0, 14, 207, 207, 160, 0, 0, 0, 0 ; darker, lower contrast grays, grid
+  !byte 13, 6, 7, 7, 2, 4, 207, 207, 160, 4, 13, 1, 8 ; bright primary colors, grid
+  !byte 11, 0, 8, 15, 8, 9, 32, 160, 160, 11, 11, 11, 11 ; dark pumpkin solid
+  !byte 13, 11, 13, 12, 0, 4, 32, 160, 160, 13, 13, 13, 13 ; C128 inspired, solid
+  !byte 0, 1, 14, 15, 14, 5, 207, 207, 160, 0, 0, 0, 0 ; Plus/4 inspired, grid
+  !byte 14, 0, 0, 0, 11, 6, 32, 160, 160, 14, 14, 14, 14 ; dark mode, solid
 
 ;******************************
 active_config:
@@ -1722,6 +1782,9 @@ border_char !byte 160
 
 charset1_color !byte 14
 charset2_color !byte 14
+
+title_color !byte 14
+menu_color !byte 14
 
 active_config_end: !byte 0 ; unused byte
 ;***************
