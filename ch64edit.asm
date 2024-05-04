@@ -755,12 +755,8 @@ toggle_case:
 
 ++cmp #$85 ; F1 key
   bne ++
-inc_foreground:  
+inc_foreground:
   inc foreground
-  lda foreground
-  eor background
-  and #15
-  beq inc_foreground
   jsr fill_color
   jmp -
 
@@ -772,10 +768,6 @@ inc_cursor:
   adc #1
   and #15
   sta pixel_cursor_color
-  lda background
-  eor pixel_cursor_color
-  and #15
-  beq inc_cursor
   jsr dispchar
   jmp -
 
@@ -783,10 +775,6 @@ inc_cursor:
   bne ++
 inc_background:
   inc background
-  lda background
-  eor foreground
-  and #15
-  beq inc_background
   jmp -
 
 ++cmp #$8a ; F4 key
@@ -797,15 +785,12 @@ inc_charset1_color
   adc #1
   and #15
   sta charset1_color
-  eor background
-  and #15
-  beq inc_charset1_color
   jsr fill_color
   jmp -
 
 ++cmp #$87 ; F5 key
   bne ++
-inc_border:  
+inc_border:
   inc border
   jmp -
 
@@ -817,9 +802,6 @@ inc_charset2_color
   adc #1
   and #15
   sta charset2_color
-  eor background
-  and #15
-  beq inc_charset2_color
   jsr fill_color
   jmp -
 
@@ -831,10 +813,6 @@ inc_pixel:
   adc #1
   and #15
   sta pixel_char_color
-  lda background
-  eor pixel_char_color
-  and #15
-  beq inc_pixel
   jsr dispchar
   jmp -
 
