@@ -11,6 +11,8 @@ color_ram = $D800
 columns = 40
 rows = 25
 
+charram = $2000 ; to $2FFF
+
 charrom = $d000
 charout = $ffd2
 getkey = $ffe4
@@ -67,9 +69,9 @@ begin:
   ror clipboard_present
   clc
   ror hide_mode
-  lda #<(start-1)
+  lda #<charram
   sta charptr
-  lda #>(start-1)
+  lda #>charram
   sta charptr+1
   jsr set_inverse_cursor
 ; setup values for different charsets
@@ -81,7 +83,7 @@ begin:
   
   ; everytime option to load config
   jsr check_load_config ; do before switching to RAM set
-  jsr choose_rom_ram_sets
+  jsr do_choose_rom_ram_sets
   jsr init_irq_scanline
 
   ; check if can skip one-time init
@@ -99,7 +101,7 @@ begin:
   lda #0
   sta ptr1
   sta ptr2
-  lda #>(start-1)
+  lda #>charram
   sta ptr1+1
   ldx #>charrom
 + stx ptr2+1
@@ -120,7 +122,6 @@ begin:
   cli
 
 init_screen:
-  jsr set2copyfordisplay
   lda #clearchar
   jsr charout
 init_screen_no_clear:
@@ -213,9 +214,9 @@ next_char:
   bcc main
   inc charptr+1
   lda charptr+1
-  cmp #(>start)+8
+  cmp #(>charram)+8
   bcc main
-  lda #>start
+  lda #>charram
   sta charptr+1
   bne main
 
@@ -229,9 +230,9 @@ pgup:
   bcc main
   inc charptr+1
   lda charptr+1
-  cmp #(>start)+8
+  cmp #(>charram)+8
   bcc main
-  lda #>start
+  lda #>charram
   sta charptr+1
   bne main
 
@@ -245,9 +246,9 @@ back_char:
   bcs main
   dec charptr+1
   lda charptr+1
-  cmp #>start
+  cmp #>charram
   bcs main
-  lda #(>start)+7
+  lda #(>charram)+7
   sta charptr+1
   jmp main
 
@@ -261,9 +262,9 @@ pgdn:
   bcs +
   dec charptr+1
   lda charptr+1
-  cmp #>start
+  cmp #>charram
   bcs +
-  lda #(>start)+7
+  lda #(>charram)+7
   sta charptr+1
 + jmp main
 
@@ -395,7 +396,7 @@ bye:
   cmp #$7f ; stop
   beq bye ; pause while stop pressed
 
-  jsr choose_rom_only_sets
+  jsr do_choose_rom_only_sets
   jsr stop_irq_scanline
 
   lda choose_charset_rom
@@ -403,7 +404,7 @@ bye:
 
   jsr check_save_config
 
-  jsr choose_rom_ram_sets ; guarantee choose_charset1 is RAM
+  jsr do_choose_rom_ram_sets ; guarantee choose_charset1 is RAM
   lda choose_charset1
   sta $D018 ; turn on programmable characters
   
@@ -422,7 +423,7 @@ bye:
   pla
   sta charset2_color ; restore color
 
-  ; adjust next token ptr to $180a if was $080a
+  ; adjust next token ptr to $300b if was $080b
   lda $7a
   cmp #<(start+10)
   bne +
@@ -456,13 +457,13 @@ save_font:
   ldx #<filename
   ldy #>filename
   jsr setnam
-  lda #<(start-1)
+  lda #<charram
   sta ptr1
-  lda #>(start-1)
+  lda #>charram
   sta ptr1+1
   lda #ptr1
-  ldx #<(new_start)
-  ldy #>(new_start)
+  ldx #<(charram+4096)
+  ldy #>(charram+4096)
   jsr fsave
   ; prompt
   lda #<press_key
@@ -629,9 +630,9 @@ toggle_chars:
   lda choose_charset1
   cmp choose_charset_rom
   beq +
-  jsr choose_rom_only_sets
+  jsr do_choose_rom_only_sets
   jmp -
-+ jsr choose_rom_ram_sets
++ jsr do_choose_rom_ram_sets
   jmp -
 
 ++cmp #starchar ; '*' key
@@ -728,11 +729,11 @@ redo:
   bne ++
 toggle_case:
   jsr reset_undo
-  lda #<(start-1)
-  ldx #>(start-1)
+  lda #<charram
+  ldx #>charram
   sta ptr1
   stx ptr1+1
-  ldx #(>(start-1))+8
+  ldx #(>charram)+8
   sta ptr2
   stx ptr2+1
   ldx #8
@@ -750,7 +751,6 @@ toggle_case:
   inc ptr2+1
   dec temp
   bne --
-  jsr set2copyfordisplay
   jmp main
 
 ++cmp #$85 ; F1 key
@@ -1231,29 +1231,6 @@ charptr_to_offset:
   ror
   rts
 
-set2copyfordisplay:
-  ; also copy second set to $2800 for VIC-II raster interrupt display
-  ; (because $1000 RAM can't be displayed by VIC-II, shows ROM instead)
-  lda #<(start-1+2048)
-  ldx #>(start-1+2048)
-  sta ptr1
-  stx ptr1+1
-  ldx #$28
-  sta ptr2
-  stx ptr2+1
-  ldx #8
-  stx temp
-  ldy #0
---lda (ptr1),y
-  sta (ptr2),y
-  iny
-  bne --
-  inc ptr1+1
-  inc ptr2+1
-  dec temp
-  bne --
-  rts
-
 irq_scanline:
   bit $d019 ; vic-ii irq status
   bmi + ; branch if not a vic-ii irq
@@ -1373,17 +1350,17 @@ stop_irq_scanline:
   cli
   rts
 
-choose_rom_ram_sets:
+do_choose_rom_ram_sets:
   lda choose_charset_rom
   and #$F0
-  ora #$02
+  ora #8
   sta choose_charset1
   and #$F0
   ora #10
   sta choose_charset2
   rts
 
-choose_rom_only_sets:
+do_choose_rom_only_sets:
   lda choose_charset_rom
   sta choose_charset1
   ora #2
