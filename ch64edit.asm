@@ -80,6 +80,7 @@ begin:
   sta vicpage
   ora #4
   sta choose_charset_rom
+  sta $D018 ; force ROM charset at startup for prompts
   
   ; everytime option to load config
   jsr check_load_config ; do before switching to RAM set
