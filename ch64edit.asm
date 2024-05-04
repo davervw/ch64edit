@@ -72,7 +72,6 @@ begin:
   lda #>(start-1)
   sta charptr+1
   jsr set_inverse_cursor
-
 ; setup values for different charsets
   lda $D018
   and #$F0
@@ -80,6 +79,7 @@ begin:
   ora #4
   sta choose_charset_rom
   jsr check_load_config ; do before switching to RAM set
+  jsr choose_rom_ram_sets
   jsr init_irq_scanline
 
   lda basicstartptr+1
@@ -380,21 +380,33 @@ toggle_bit:
 
 ++cmp #$03 ; stop key
   bne ++
-bye:  
+bye:
+  jsr choose_rom_only_sets
+  jsr stop_irq_scanline
+
+  lda choose_charset_rom
+  sta $D018 ; turn off programmable characters
+
   jsr check_save_config
 
+  jsr choose_rom_ram_sets ; guarantee choose_charset1 is RAM
   lda choose_charset1
   sta $D018 ; turn on programmable characters
   
-  clc
-  lsr hide_mode
-
   lda #<done
   ldx #>done
   jsr strout
 
+  clc
+  lsr hide_mode
+  lda charset2_color
+  pha ; save color because we're gonna change it temporarily
+  lda background
+  sta charset2_color ; make invisible
   jsr fill_color
   jsr all_chars
+  pla
+  sta charset2_color ; restore color
 
   ; adjust next token ptr to $180a if was $080a
   lda $7a
@@ -1297,6 +1309,20 @@ init_irq_scanline:
   cli ; re-enable IRQ
   rts
 
+stop_irq_scanline:
+  sei
+  lda jmp_orig_irq+1
+  ldx jmp_orig_irq+2
+  sta $0314
+  stx $0315
+  lda $d01a
+  and #$fe
+  sta $d01a
+  lda #1
+  sta $d019
+  cli
+  rts
+
 choose_rom_ram_sets:
   lda choose_charset_rom
   and #$F0
@@ -1643,7 +1669,7 @@ lines_margin:
   !byte $92,$20,$20,$20,$00
 
 done:
-  !byte 147,0
+  !text 147,"BYE!",13,0
 
 filename:
   !text "@0:FONT.BIN"
