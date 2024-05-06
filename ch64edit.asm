@@ -440,9 +440,15 @@ bye:
   bne ++
 save_font:
   jsr save_scanline_choices
-  ; clear screen
-  lda #clearchar
-  jsr charout
+  ; clear screen and prompt
+  lda #<save_prompt
+  ldx #>save_prompt
+  jsr strout
+  lda #<overwrite_filename
+  ldx #>overwrite_filename
+  jsr strout
+  jsr edit_filename
+  beq +
   ; setup and save
   lda #10
   sta $39
@@ -454,9 +460,11 @@ save_font:
   ldx #8
   ldy #15
   jsr setlfs
-  lda #(filename_end - filename)
-  ldx #<filename
-  ldy #>filename
+  lda filename_len
+  clc
+  adc #extra_overwrite_filename_len
+  ldx #<overwrite_filename
+  ldy #>overwrite_filename
   jsr setnam
   lda #<charram
   sta ptr1
@@ -473,7 +481,48 @@ save_font:
 --jsr getkey
   beq --
   jsr restore_scanline_choices
-  jmp init_screen
++ jmp init_screen
+
+++cmp #$4C ; 'L' key
+  bne ++
+load_font:
+  jsr save_scanline_choices
+  ; clear screen and prompt
+  lda #<load_prompt
+  ldx #>load_prompt
+  jsr strout
+  lda #<filename
+  ldx #>filename
+  jsr strout
+  jsr edit_filename
+  beq +
+  ; setup and load
+  lda #10
+  sta $39
+  lda #0
+  sta $3a
+  lda #$c0 ; KERNAL control and error messages
+  sta $9d ; set messages to be displayed
+  lda #1
+  ldx #8
+  ldy #0
+  jsr setlfs
+  lda filename_len
+  ldx #<filename
+  ldy #>filename
+  jsr setnam
+  lda #0
+  ldx #<charram
+  ldy #>charram
+  jsr fload
+  ; prompt
+  lda #<press_key
+  ldx #>press_key
+  jsr strout
+--jsr getkey
+  beq --
+  jsr restore_scanline_choices
++ jmp init_screen
 
 ++cmp #clearchar ; CLR key
   bne ++
@@ -1639,6 +1688,46 @@ getyesno:
   jsr strout
 ++rts
 
+edit_filename:
+--jsr disp_fakecursor
+- jsr getkey
+  beq -
+  ldx filename_len
+  cmp #13 ; return key
+  beq ++
++ cmp #20 ; backspace key
+  bne +
+  cpx #0
+  beq - ; nothing to backspace
+  jsr charout
+  dec filename_len
+  jmp -
++ cmp #32
+  bcc - ; disallow control codes
+  bcs +
+  cmp #128
+  bcc +
+  cmp #160
+  bcc - ; disallow more control codes
++ cpx #16
+  bcs - ; can't add more
+  jsr charout
+  inc filename_len
+  sta filename,x
+  bne --
+++lda #<fakecursor_off
+  ldx #>fakecursor_off
+  jsr strout
+  lda #0
+  ldx filename_len
+  sta filename,x
+  rts
+
+disp_fakecursor:
+  lda #<fakecursor
+  ldx #>fakecursor
+  jmp strout
+
 bitmask:
   !byte $80,$40,$20,$10,$08,$04,$02,$01
 
@@ -1678,7 +1767,7 @@ menus:
   !text 18,"HOME",146," ",18,"CLR",13,0
   !text 18,"RVS",146,"  ",18,"SPACE",13,0
   !text 18,"STOP",146," ",18,"S",146,"AVE",13,0
-  !text 18,"H",146,"IDE",13,0
+  !text 18,"H",146,"IDE ",18,"L",146,"OAD",13,0
   
 blanks:
   !byte $92,$20,$20,$20,$20,$20,$20,$20,$20,$12,$00
@@ -1692,15 +1781,14 @@ lines_margin:
 done:
   !text 147,"BYE!",13,0
 
-filename:
-  !text "@0:FONT.BIN"
-filename_end:
-
 save_config_filename:
   !text "@0:"
 load_config_filename
   !text "FONT.CFG"
 config_filename_end:
+
+fakecursor: !byte 18, 32, 146, 157, 0
+fakecursor_off: !byte 32, 13, 0
 
 press_key: !text 13, 13, 18, "PRESS ANY KEY", 13, 0
 
@@ -1708,6 +1796,8 @@ ask_load_config: !text 147, 13, "LOAD CONFIGURATION (Y/N)? ", 18, "Y", 146, 157,
 config_changed: !text 147, 13, "SAVE CONFIGURATION (Y/N)? ", 18, "Y", 146, 157, 0
 yes: !text "YES", 13, 0
 no: !text "NO", 13, 0
+save_prompt: !text 147, 13, "SAVE: ", 0
+load_prompt: !text 147, 13, "LOAD: ", 0
 
 themes:
   !byte 14, 6, 14, 14, 0, 1, 32, 160, 160, 14, 14, 14, 14 ; standard colors, black pixels in editor, white pixel cursor, solid pixels
@@ -1765,5 +1855,12 @@ choose_charset2: !byte 16+14
 ; safe storage while saving to counter visual issues with interrupts being disabled during saves
 save_choose_charset1: !byte 0
 save_choose_charset2: !byte 0
+
+overwrite_filename: !text "@0:"
+extra_overwrite_filename_len = *-overwrite_filename
+filename: !text "FONT.BIN"
+load_filename_default_len = *-filename
+*=filename+16 ; reserve space for filename
+filename_len: !byte load_filename_default_len
 
 file_config: ; must be at end of program, available space
