@@ -21,7 +21,7 @@ Abbreviated Memory map - C64
     0800-1FFF available (was program RAM) ****
     2000-2FFF character RAM sets (was program RAM) ****
     3000-9FFF program RAM (reduced)
-    D000-D7FF character RAM set 1 (uppercase/graphics) -- banked
-    D800-DFFF character RAM set 2 (lowercase/uppercase) -- banked
+    D000-D7FF character ROM set 1 (uppercase/graphics) -- banked
+    D800-DFFF character ROM set 2 (lowercase/uppercase) -- banked
 
 There is also [ch20edit](https://github.com/davervw/ch20edit) for Vic-20
