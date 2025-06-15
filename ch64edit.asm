@@ -1,9 +1,11 @@
 ; ch64edit.asm
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; ch64edit - Character Sets Editor for Commodore Vic-20
+;; ch64edit - Character Sets Editor for Commodore 64
 ;; Copyright (c) 2024 by David R. Van Wagner
 ;; davevw.com
 ;; MIT LICENSE
+;;
+;; ported from the Vic-20 version ch20edit and expanded with C64 features
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; MIT License
 ;;
