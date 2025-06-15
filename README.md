@@ -4,15 +4,9 @@ C64 character set editor
 
 Hint: SPACE toggles pixel.  Menus are on screen.
 
-Note: saves to FONT.BIN overwriting any existing file.   Manual load from BASIC is initially required to edit a font (after running/initializing editor, and exiting).
-
-``
-LOAD "FONT.BIN",8,1
-``
-
 And wrote a [blog entry](https://techwithdave.davevw.com/2024/04/edit-vic-20-programmable-characters.html).  Includes more details on keys for operations.
 
-![prototype](media/functional.png)
+![ch64edit.png](media/ch64edit.png)
 
 Abbreviated Memory map - C64
 
